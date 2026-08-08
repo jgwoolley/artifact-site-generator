@@ -1,47 +1,221 @@
 # Artifact Site Generator
 
-A Java CLI for generating release websites for artifacts deployed within CI/CD.
+A Java CLI that parses release artifacts and generates a fully static artifact registry site.
 
-## Projects
+## Goals
 
-### artifact-site-plugins-api
+- Parse local or remote artifacts through plugins.
+- Persist normalized metadata in a local catalog.
+- Generate a static website that looks similar to the Eclipse OpenVSIX registry experience.
+- Keep the output hostable from any static file host (GitHub Pages, S3 static hosting, Nginx, Apache, etc.).
 
-Contains the PF4J api for defining custom plugins. These PF4J Plugins can register IArtifactParser which are given an InputStream, file metadata, and a context object that can write metadata associated with the given artifact.
+## Technology Choices
 
-Each artifact should have the ability to write a artifact name (ala project human readable name), artifact id (ala Maven artifact id), group id, authors, version, and tags. The version / human readable name / project id must be provided. This project has the goal of supporting Apache NiFi NAR files, and VSCode VSIX files.
+### Core Runtime
 
-### artifact-site-cli
+- **Java 21**
+- **Maven** (multi-module build)
+- **picocli** for CLI command parsing
+- **PF4J** for parser plugin discovery and loading
+- **Apache HttpClient 5** for remote artifact download/streaming
+- **Jackson** (`jackson-databind`, `jackson-dataformat-yaml`) for metadata and config serialization
+- **Apache FreeMarker** for static HTML templating
+- **SLF4J + Logback** for logging
 
-A picocli CLI that can be configured with Jars that implement artifact-site-plugins-api to register artifact parsers. These plugin Jars should be stored based on the XGD standard in a sensible location, and loaded in on startup.
+### Testing
 
-There should be a CLI option for copying a JAR to the correct location for it to be loaded automatically, but also because it implements XGD standard users will be able to update where this location is.
+- **JUnit 5**
+- **AssertJ**
+- **Mockito**
+- **Maven Surefire + Failsafe** for unit/integration test separation
+
+## Repository / Module Plan
+
+Create a Maven multi-module project:
+
+- `artifact-site-parent` (root pom)
+- `artifact-site-plugins-api`
+  - Shared plugin interfaces and metadata model contracts
+- `artifact-site-cli`
+  - Main executable CLI, plugin loading, parse pipeline, static site generation
+- `artifact-site-plugin-vsix`
+  - VSIX parser plugin
+- `artifact-site-plugin-nifi-nar`
+  - Apache NiFi NAR parser plugin
+
+Build the CLI as an uberjar using `maven-shade-plugin`.
+
+## XDG Paths (Concrete Locations)
+
+Default paths must follow XDG with explicit fallbacks:
+
+- **Config file**
+  - `${XDG_CONFIG_HOME:-~/.config}/artifact-site-generator/config.yaml`
+- **Plugin directory**
+  - `${XDG_DATA_HOME:-~/.local/share}/artifact-site-generator/plugins`
+- **Metadata catalog directory**
+  - `${XDG_STATE_HOME:-~/.local/state}/artifact-site-generator/catalog`
+- **Working cache directory**
+  - `${XDG_CACHE_HOME:-~/.cache}/artifact-site-generator`
+- **Generated static site output**
+  - `./public` by default (override with `--output`)
+
+## Data Model
+
+Each parsed artifact record should include:
+
+- `id` (stable unique id, e.g., hash or `<group>:<artifact>:<version>`)
+- `artifactName` (human-readable project name) **required**
+- `artifactId` **required**
+- `groupId` **required**
+- `version` **required**
+- `description`
+- `authors` (list)
+- `tags` (list)
+- `license`
+- `createdAt` (parse timestamp)
+- `sourceType` (`local` or `remote`)
+- `sourceValue` (local path or URL)
+- `downloadUrl` (final URL used by the site download button)
+- `fileName`
+- `fileSizeBytes`
+- `sha256`
+- `pluginId` (which parser produced this record)
+
+Catalog storage format:
+
+- `catalog/artifacts.json` (canonical list used by generator)
+- Optional split files for scale:
+  - `catalog/artifacts/<artifact-id>/<version>.json`
+
+## Plugin API Plan
+
+Define in `artifact-site-plugins-api`:
+
+- `ArtifactParserPlugin` (PF4J extension point)
+- `ArtifactParser` interface:
+  - `supports(ArtifactInputDescriptor descriptor): boolean`
+  - `parse(ArtifactInput input, ArtifactParseContext context): ArtifactMetadata`
+- `ArtifactInputDescriptor`:
+  - input type, file name, extension, content type hints
+- `ArtifactParseContext`:
+  - checksum utilities
+  - safe temp workspace
+  - metadata writer helpers
+
+Plugins decide artifact compatibility and produce normalized metadata only.
+
+## CLI Command Plan
+
+### `add-plugin`
 
 ```sh
-artifact-site-generator add-plugin jar-site-generator.jar
+artifact-site-generator add-plugin /path/to/plugin.jar
 ```
 
-A local file can be provided:
+- Copies JAR into `${XDG_DATA_HOME:-~/.local/share}/artifact-site-generator/plugins`.
+- Validates readable JAR and deduplicates by filename/hash.
+
+### `parse`
+
+Local file:
 
 ```sh
-artifact-site-generator parse jar example.jar
+artifact-site-generator parse /path/to/example.vsix
 ```
 
-Or a remote HTTP Server (Apache HTTP Client should be used):
+Remote URL:
 
 ```sh
-artifact-site-generator parse jar https://example.com/jars/example.jar
+artifact-site-generator parse https://example.com/releases/example.vsix
 ```
 
-Both of these commands will write out the metadata of the files. This will default to a sensible location based on XGD standard, or when provided with a CLI option, will write out to a specified location.
+Behavior:
 
-After the user runs the parse command as many times as they would like then a site will be generated at the local ./public folder (or overridden by a CLI option).
+- Detect parser plugin via `supports`.
+- Parse metadata and append/update catalog.
+- Resolve `downloadUrl`:
+  - If input is **remote URL**, `downloadUrl` must be that exact URL.
+  - If input is **local file**, copy artifact to:
+    - `./public/downloads/<artifactId>/<version>/<fileName>`
+    - and set `downloadUrl` to relative path:
+      - `/downloads/<artifactId>/<version>/<fileName>`
+
+### `generate`
 
 ```sh
-artifact-site-generator generate --output=./dist
+artifact-site-generator generate --output ./public
 ```
 
-This project will be an uberjar so it contains everything it needs to run.
+- Reads catalog and renders static files.
+- Produces all pages, assets, and search index.
+- Never requires a runtime backend service.
 
-### Plugins
+## Static Site Construction Plan
 
-* there will be a jar-site-generator Maven project that implements artifact-site-plugins-api
+Use FreeMarker templates in `artifact-site-cli/src/main/resources/templates`:
+
+- `layout.ftl` (base shell)
+- `index.ftl` (registry listing page)
+- `artifact.ftl` (artifact detail page)
+- `tag.ftl` (tag filtered listing page)
+
+Generated output in `./public`:
+
+- `index.html`
+- `artifacts/<artifact-id>/index.html`
+- `tags/<tag>/index.html`
+- `assets/styles.css`
+- `assets/app.js`
+- `assets/logo.svg`
+- `search-index.json`
+- `downloads/...` (for local artifact inputs only)
+
+## UI/UX Direction (OpenVSIX-Inspired)
+
+Match the OpenVSIX registry feel with:
+
+- Top navigation with logo + search input
+- Grid/list cards showing name, version, tags, and short description
+- Artifact detail page with:
+  - title, metadata table, version, authors, tags
+  - clear **Download** button using `downloadUrl`
+- Clean spacing, neutral light theme, subtle card borders/shadows
+- Responsive layout for desktop/tablet/mobile
+
+Implementation detail:
+
+- Use server-free client-side filtering via `search-index.json` and vanilla JS.
+- Keep CSS in a single static stylesheet; no runtime CSS framework required.
+
+## End-to-End Flow
+
+1. User installs parser plugins with `add-plugin`.
+2. User runs `parse` for any number of local files or remote URLs.
+3. CLI updates catalog metadata and copies local artifacts into `./public/downloads/...`.
+4. User runs `generate`.
+5. Static site appears in `./public` and can be hosted as-is.
+
+## Non-Goals
+
+- No database
+- No server-side rendering at request time
+- No authentication/authorization layer in this project
+- No artifact upload API
+
+## Delivery Milestones
+
+1. **Bootstrap**
+   - Multi-module Maven setup, CLI entrypoint, plugin loading.
+2. **Plugin API**
+   - Contracts, validation, metadata schema.
+3. **Initial Plugins**
+   - VSIX and NiFi NAR parsing.
+4. **Catalog Persistence**
+   - JSON catalog read/write/update rules.
+5. **Static Generator**
+   - FreeMarker templates + output assets.
+6. **OpenVSIX-style UI**
+   - Listing/detail pages + client-side search/filter.
+7. **Hardening**
+   - Input validation, tests, docs, packaging, release steps.
