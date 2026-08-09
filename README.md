@@ -13,7 +13,7 @@ A Java CLI that parses release artifacts and generates a fully static artifact r
 
 ### Core Runtime
 
-- **Java 21**
+- **Java 17**
 - **Maven** (multi-module build)
 - **picocli** for CLI command parsing
 - **PF4J** for parser plugin discovery and loading
@@ -206,22 +206,22 @@ Implementation detail:
 
 ## Delivery Milestones
 
-1. **Bootstrap**
-   - Multi-module Maven setup, CLI entrypoint, plugin loading.
-2. **Plugin API**
-   - Contracts, validation, metadata schema.
-3. **Initial Plugin**
-   - VSIX
-4. **Catalog Persistence**
-   - JSON catalog read/write/update rules.
-5. **Static Generator**
-   - FreeMarker templates + output assets.
-6. **OpenVSIX-style UI**
-   - Listing/detail pages + client-side search/filter.
-7. **Hardening**
-   - Input validation, tests, docs, packaging, release steps.
-8. **More Plugins**
-   - VSIX
-   - Jar
-   - NiFi NAR
-   - Maven
+- [x] **Bootstrap**
+  - Multi-module Maven setup, CLI entrypoint, plugin loading.
+- [x] **Plugin API**
+  - Contracts, validation, metadata schema.
+- [x] **Initial Plugin**
+  - VSIX
+- [ ] **Catalog Persistence**
+  - JSON catalog read/write/update rules.
+- [ ] **Static Generator**
+  - FreeMarker templates + output assets.
+- [ ] **OpenVSIX-style UI**
+  - Listing/detail pages + client-side search/filter.
+- [ ] **Hardening**
+  - Input validation, tests, docs, packaging, release steps.
+- [ ] **More Plugins**
+  - VSIX
+  - Jar
+  - NiFi NAR
+  - Maven
