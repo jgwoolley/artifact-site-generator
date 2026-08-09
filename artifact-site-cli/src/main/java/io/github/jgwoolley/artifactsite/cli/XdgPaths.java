@@ -2,10 +2,18 @@ package io.github.jgwoolley.artifactsite.cli;
 
 import java.nio.file.Path;
 
+/**
+ * Resolves XDG-based application filesystem locations.
+ */
 final class XdgPaths {
     private XdgPaths() {
     }
 
+    /**
+     * Returns the plugin installation directory.
+     *
+     * @return plugin directory path
+     */
     static Path pluginDir() {
         String dataHome = System.getenv("XDG_DATA_HOME");
         if (dataHome == null || dataHome.isBlank()) {
