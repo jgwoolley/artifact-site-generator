@@ -21,6 +21,7 @@ A Java CLI that parses release artifacts and generates a fully static artifact r
 - **Jackson** (`jackson-databind`, `jackson-dataformat-yaml`) for metadata and config serialization
 - **Apache FreeMarker** for static HTML templating
 - **SLF4J + Logback** for logging
+- **Apache Tika**: For mime-type and file type detection
 
 ### Testing
 
@@ -209,8 +210,8 @@ Implementation detail:
    - Multi-module Maven setup, CLI entrypoint, plugin loading.
 2. **Plugin API**
    - Contracts, validation, metadata schema.
-3. **Initial Plugins**
-   - VSIX and NiFi NAR parsing.
+3. **Initial Plugin**
+   - VSIX
 4. **Catalog Persistence**
    - JSON catalog read/write/update rules.
 5. **Static Generator**
@@ -219,3 +220,8 @@ Implementation detail:
    - Listing/detail pages + client-side search/filter.
 7. **Hardening**
    - Input validation, tests, docs, packaging, release steps.
+8. **More Plugins**
+   - VSIX
+   - Jar
+   - NiFi NAR
+   - Maven
