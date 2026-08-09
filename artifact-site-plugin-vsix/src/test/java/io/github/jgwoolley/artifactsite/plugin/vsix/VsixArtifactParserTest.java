@@ -1,0 +1,62 @@
+package io.github.jgwoolley.artifactsite.plugin.vsix;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+import io.github.jgwoolley.artifactsite.api.ArtifactInputDescriptor;
+import io.github.jgwoolley.artifactsite.api.ArtifactMetadata;
+import io.github.jgwoolley.artifactsite.api.ArtifactParseContext;
+import io.github.jgwoolley.artifactsite.api.ArtifactSourceType;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
+import org.junit.jupiter.api.Test;
+
+class VsixArtifactParserTest {
+
+    private final VsixArtifactParser parser = new VsixArtifactParser();
+
+    @Test
+    void supportsVsixFiles() {
+        ArtifactInputDescriptor descriptor = new ArtifactInputDescriptor(
+                ArtifactSourceType.LOCAL,
+                "/tmp/sample.vsix",
+                "sample.vsix",
+                "vsix",
+                "application/zip");
+
+        assertThat(parser.supports(descriptor)).isTrue();
+    }
+
+    @Test
+    void parsesManifestIdentity() throws Exception {
+        Path vsix = Files.createTempFile("sample", ".vsix");
+        try (ZipOutputStream out = new ZipOutputStream(Files.newOutputStream(vsix))) {
+            out.putNextEntry(new ZipEntry("extension.vsixmanifest"));
+            out.write(("""
+                    <PackageManifest>
+                      <Metadata>
+                        <Identity Id="artifact-id" Version="1.2.3" Publisher="example.publisher" />
+                        <DisplayName>Example Extension</DisplayName>
+                      </Metadata>
+                    </PackageManifest>
+                    """).getBytes());
+            out.closeEntry();
+        }
+
+        ArtifactMetadata metadata = parser.parse(new ArtifactInputDescriptor(
+                ArtifactSourceType.LOCAL,
+                vsix.toString(),
+                vsix.getFileName().toString(),
+                "vsix",
+                "application/zip"), new ArtifactParseContext());
+
+        assertThat(metadata.getArtifactId()).isEqualTo("artifact-id");
+        assertThat(metadata.getVersion()).isEqualTo("1.2.3");
+        assertThat(metadata.getGroupId()).isEqualTo("example.publisher");
+        assertThat(metadata.getArtifactName()).isEqualTo("Example Extension");
+        assertThat(metadata.getPluginId()).isEqualTo("vsix");
+        assertThat(metadata.getSha256()).isNotBlank();
+        assertThat(metadata.getFileSizeBytes()).isPositive();
+    }
+}
