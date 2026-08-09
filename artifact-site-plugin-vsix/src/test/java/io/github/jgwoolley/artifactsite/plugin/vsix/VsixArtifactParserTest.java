@@ -59,4 +59,34 @@ class VsixArtifactParserTest {
         assertThat(metadata.getSha256()).isNotBlank();
         assertThat(metadata.getFileSizeBytes()).isPositive();
     }
+
+    @Test
+    void parsesVscodeStyleManifestWithNamespace() throws Exception {
+        Path vsix = Files.createTempFile("vscode-sample", ".vsix");
+        try (ZipOutputStream out = new ZipOutputStream(Files.newOutputStream(vsix))) {
+            out.putNextEntry(new ZipEntry("extension.vsixmanifest"));
+            out.write(("""
+                    <?xml version="1.0" encoding="utf-8"?>
+                    <PackageManifest xmlns="http://schemas.microsoft.com/developer/vsx-schema/2011">
+                      <Metadata>
+                        <Identity Id="vscode-artifact" Version="0.0.1" Publisher="publisher.name" />
+                        <DisplayName>VS Code Extension</DisplayName>
+                      </Metadata>
+                    </PackageManifest>
+                    """).getBytes());
+            out.closeEntry();
+        }
+
+        ArtifactMetadata metadata = parser.parse(new ArtifactInputDescriptor(
+                ArtifactSourceType.LOCAL,
+                vsix.toString(),
+                vsix.getFileName().toString(),
+                "vsix",
+                "application/zip"), new ArtifactParseContext());
+
+        assertThat(metadata.getArtifactId()).isEqualTo("vscode-artifact");
+        assertThat(metadata.getVersion()).isEqualTo("0.0.1");
+        assertThat(metadata.getGroupId()).isEqualTo("publisher.name");
+        assertThat(metadata.getArtifactName()).isEqualTo("VS Code Extension");
+    }
 }

@@ -11,6 +11,9 @@ import picocli.CommandLine;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Parameters;
 
+/**
+ * CLI entry point for artifact-site-generator.
+ */
 @Command(name = "artifact-site-generator", mixinStandardHelpOptions = true, subcommands = {
         ArtifactSiteGeneratorCli.ParseCommand.class,
         ArtifactSiteGeneratorCli.AddPluginCommand.class,
@@ -18,21 +21,29 @@ import picocli.CommandLine.Parameters;
 })
 public class ArtifactSiteGeneratorCli implements Runnable {
 
+    /**
+     * Application main method.
+     *
+     * @param args command line arguments
+     */
     public static void main(String[] args) {
         int exitCode = new CommandLine(new ArtifactSiteGeneratorCli()).execute(args);
         System.exit(exitCode);
     }
 
+    /** Prints command usage when no subcommand is provided. */
     @Override
     public void run() {
         CommandLine.usage(this, System.out);
     }
 
+    /** Installs parser plugin artifacts in the local plugin directory. */
     @Command(name = "add-plugin", description = "Adds a parser plugin JAR to the plugin directory")
     static class AddPluginCommand implements Runnable {
         @Parameters(index = "0", description = "Plugin JAR path")
         private Path pluginJar;
 
+        /** Copies the plugin JAR into the configured plugin directory. */
         @Override
         public void run() {
             try {
@@ -47,11 +58,13 @@ public class ArtifactSiteGeneratorCli implements Runnable {
         }
     }
 
+    /** Loads parser plugins and prints plugin metadata for an input artifact path. */
     @Command(name = "parse", description = "Loads parser plugins and prints the first plugin that supports the input")
     static class ParseCommand implements Runnable {
         @Parameters(index = "0", description = "Artifact file path")
         private Path artifactPath;
 
+        /** Executes parser plugin discovery and reporting. */
         @Override
         public void run() {
             PluginManager pluginManager = new DefaultPluginManager(XdgPaths.pluginDir());
@@ -64,8 +77,10 @@ public class ArtifactSiteGeneratorCli implements Runnable {
         }
     }
 
+    /** Placeholder command for the site generation milestone. */
     @Command(name = "generate", description = "Reserved for static site generation milestone")
     static class GenerateCommand implements Runnable {
+        /** Prints placeholder output for the future generate implementation. */
         @Override
         public void run() {
             System.out.println("Generate command scaffolded; implementation comes in later milestones.");

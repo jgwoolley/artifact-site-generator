@@ -222,6 +222,6 @@ Implementation detail:
   - Input validation, tests, docs, packaging, release steps.
 - [ ] **More Plugins**
   - VSIX
-  - Jar
+  - VSIX parser
   - NiFi NAR
   - Maven

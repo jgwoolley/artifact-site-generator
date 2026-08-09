@@ -12,13 +12,18 @@ import java.util.Objects;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 import javax.xml.parsers.DocumentBuilderFactory;
+import org.jspecify.annotations.Nullable;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 import org.w3c.dom.NodeList;
 
+/**
+ * Parser for Visual Studio Code VSIX extension packages.
+ */
 public class VsixArtifactParser implements ArtifactParser {
+    /** {@inheritDoc} */
     @Override
-    public boolean supports(ArtifactInputDescriptor descriptor) {
+    public boolean supports(@Nullable ArtifactInputDescriptor descriptor) {
         if (descriptor == null || descriptor.fileName() == null) {
             return false;
         }
@@ -26,6 +31,14 @@ public class VsixArtifactParser implements ArtifactParser {
                 || Objects.equals("vsix", descriptor.extension());
     }
 
+    /**
+     * Parses VSIX package metadata from the package manifest.
+     *
+     * @param descriptor input descriptor
+     * @param context parse helpers and utilities
+     * @return normalized artifact metadata
+     * @throws Exception when parsing fails
+     */
     @Override
     public ArtifactMetadata parse(ArtifactInputDescriptor descriptor, ArtifactParseContext context) throws Exception {
         if (descriptor.sourceType() != ArtifactSourceType.LOCAL) {
@@ -59,6 +72,13 @@ public class VsixArtifactParser implements ArtifactParser {
         return metadata;
     }
 
+    /**
+     * Reads the VSIX identity node from the manifest.
+     *
+     * @param path VSIX file path
+     * @return identity element
+     * @throws Exception when the manifest cannot be read
+     */
     private Element readIdentity(Path path) throws Exception {
         Document doc = parseManifest(path);
         NodeList nodes = doc.getElementsByTagName("Identity");
@@ -68,6 +88,14 @@ public class VsixArtifactParser implements ArtifactParser {
         return (Element) nodes.item(0);
     }
 
+    /**
+     * Reads the display name from the manifest.
+     *
+     * @param path VSIX file path
+     * @param fallback fallback display name
+     * @return display name or fallback
+     * @throws Exception when the manifest cannot be read
+     */
     private String readDisplayName(Path path, String fallback) throws Exception {
         Document doc = parseManifest(path);
         NodeList nodes = doc.getElementsByTagName("DisplayName");
@@ -78,6 +106,13 @@ public class VsixArtifactParser implements ArtifactParser {
         return value == null || value.isBlank() ? fallback : value.trim();
     }
 
+    /**
+     * Parses the VSIX manifest document from the archive.
+     *
+     * @param path VSIX file path
+     * @return parsed manifest document
+     * @throws Exception when the manifest is missing or invalid
+     */
     private Document parseManifest(Path path) throws Exception {
         try (ZipFile zipFile = new ZipFile(path.toFile())) {
             ZipEntry manifest = zipFile.getEntry("extension.vsixmanifest");
