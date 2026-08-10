@@ -17,7 +17,8 @@ import picocli.CommandLine.Parameters;
 @Command(name = "artifact-site-generator", mixinStandardHelpOptions = true, subcommands = {
         ArtifactSiteGeneratorCli.ParseCommand.class,
         ArtifactSiteGeneratorCli.AddPluginCommand.class,
-        ArtifactSiteGeneratorCli.GenerateCommand.class
+        ArtifactSiteGeneratorCli.GenerateCommand.class,
+        ArtifactSiteGeneratorCli.ListPluginsCommand.class,
 })
 public class ArtifactSiteGeneratorCli implements Runnable {
 
@@ -55,6 +56,22 @@ public class ArtifactSiteGeneratorCli implements Runnable {
             } catch (IOException e) {
                 throw new CommandLine.ExecutionException(new CommandLine(this), "Failed to install plugin", e);
             }
+        }
+    }
+
+    @Command(name = "list-plugins", description = "Lists parser plugins")
+    static class ListPluginsCommand implements Runnable {
+        @Override
+        public void run() {
+            Path pluginDir = XdgPaths.pluginDir();
+            System.out.println("Plugin Directory: " + pluginDir);
+
+            PluginManager pluginManager = new DefaultPluginManager(pluginDir);
+            pluginManager.loadPlugins();
+            pluginManager.startPlugins();
+            List<ArtifactParserPlugin> parsers = pluginManager.getExtensions(ArtifactParserPlugin.class);
+            System.out.printf("Loaded %d parser plugin(s).%n", parsers.size());
+            parsers.forEach(p -> System.out.printf("- %s%n", p.pluginId()));
         }
     }
 
