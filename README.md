@@ -115,6 +115,8 @@ artifact-site-generator add-plugin /path/to/plugin.jar
 ```
 
 - Copies JAR into `${XDG_DATA_HOME:-~/.local/share}/artifact-site-generator/plugins`.
+- If the destination file already exists, it is replaced.
+- Use `--plugin-dir /path/to/plugins` to install into a custom plugin directory.
 - Validates readable JAR and deduplicates by filename/hash.
 
 ### `parse`
@@ -134,6 +136,7 @@ artifact-site-generator parse https://example.com/releases/example.vsix
 Behavior:
 
 - Detect parser plugin via `supports`.
+- Loads parser plugins from the default XDG plugin directory and, when provided, `--plugin-dir`.
 - Parse metadata and append/update catalog.
 - Resolve `downloadUrl`:
   - If input is **remote URL**, `downloadUrl` must be that exact URL.
