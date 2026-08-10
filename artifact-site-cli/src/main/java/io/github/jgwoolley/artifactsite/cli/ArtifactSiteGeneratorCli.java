@@ -8,9 +8,16 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.List;
+import org.pf4j.CompoundPluginLoader;
+import org.pf4j.DevelopmentPluginLoader;
+import org.pf4j.DefaultPluginLoader;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.pf4j.DefaultPluginManager;
+import org.pf4j.JarPluginLoader;
+import org.pf4j.PluginClassLoader;
+import org.pf4j.PluginDescriptor;
+import org.pf4j.PluginLoader;
 import org.pf4j.PluginManager;
 import picocli.CommandLine;
 import picocli.CommandLine.Command;
@@ -66,7 +73,66 @@ public class ArtifactSiteGeneratorCli implements Runnable {
     }
 
     PluginManager createPluginManager() {
-        return new DefaultPluginManager(pluginLoadDirs());
+        return new ArtifactSitePluginManager(pluginLoadDirs());
+    }
+
+    private static final class ArtifactSitePluginManager extends DefaultPluginManager {
+        private ArtifactSitePluginManager(List<Path> pluginsRoots) {
+            super(pluginsRoots);
+        }
+
+        @Override
+        protected PluginLoader createPluginLoader() {
+            return new CompoundPluginLoader()
+                    .add(new DevelopmentPluginLoader(this) {
+                        @Override
+                        protected PluginClassLoader createPluginClassLoader(
+                                Path pluginPath,
+                                PluginDescriptor pluginDescriptor) {
+                            return createApplicationFirstPluginClassLoader(pluginDescriptor);
+                        }
+                    }, this::isDevelopment)
+                    .add(new JarPluginLoader(this) {
+                        @Override
+                        public ClassLoader loadPlugin(Path pluginPath, PluginDescriptor pluginDescriptor) {
+                            PluginClassLoader pluginClassLoader = createApplicationFirstPluginClassLoader(
+                                    pluginDescriptor);
+                            pluginClassLoader.addFile(pluginPath.toFile());
+                            return pluginClassLoader;
+                        }
+                    }, this::isNotDevelopment)
+                    .add(new DefaultPluginLoader(this) {
+                        @Override
+                        protected PluginClassLoader createPluginClassLoader(
+                                Path pluginPath,
+                                PluginDescriptor pluginDescriptor) {
+                            return createApplicationFirstPluginClassLoader(pluginDescriptor);
+                        }
+                    }, this::isNotDevelopment);
+        }
+
+        private PluginClassLoader createApplicationFirstPluginClassLoader(PluginDescriptor pluginDescriptor) {
+            return new ApiParentFirstPluginClassLoader(this, pluginDescriptor, getClass().getClassLoader());
+        }
+    }
+
+    private static final class ApiParentFirstPluginClassLoader extends PluginClassLoader {
+        private ApiParentFirstPluginClassLoader(
+                PluginManager pluginManager,
+                PluginDescriptor pluginDescriptor,
+                ClassLoader parent) {
+            super(pluginManager, pluginDescriptor, parent);
+        }
+
+        @Override
+        public Class<?> loadClass(String className) throws ClassNotFoundException {
+            if (className.startsWith("io.github.jgwoolley.artifactsite.api.")
+                    || className.startsWith("org.pf4j.")) {
+                return getParent().loadClass(className);
+            }
+
+            return super.loadClass(className);
+        }
     }
 
     /** Installs parser plugin artifacts in the local plugin directory. */
