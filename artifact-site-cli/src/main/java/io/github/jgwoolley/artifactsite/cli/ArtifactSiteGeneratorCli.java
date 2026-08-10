@@ -1,5 +1,8 @@
 package io.github.jgwoolley.artifactsite.cli;
 
+import io.github.jgwoolley.artifactsite.api.ArtifactInputDescriptor;
+import io.github.jgwoolley.artifactsite.api.ArtifactMetadata;
+import io.github.jgwoolley.artifactsite.api.ArtifactParseContext;
 import io.github.jgwoolley.artifactsite.api.ArtifactParserPlugin;
 import java.io.IOException;
 import java.io.PrintWriter;
@@ -8,6 +11,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.List;
+
 import org.pf4j.CompoundPluginLoader;
 import org.pf4j.DevelopmentPluginLoader;
 import org.pf4j.DefaultPluginLoader;
@@ -19,6 +23,7 @@ import org.pf4j.PluginClassLoader;
 import org.pf4j.PluginDescriptor;
 import org.pf4j.PluginLoader;
 import org.pf4j.PluginManager;
+import org.pf4j.PluginWrapper;
 import picocli.CommandLine;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
@@ -125,13 +130,28 @@ public class ArtifactSiteGeneratorCli implements Runnable {
         }
 
         @Override
-        public Class<?> loadClass(String className) throws ClassNotFoundException {
-            if (className.startsWith("io.github.jgwoolley.artifactsite.api.")
-                    || className.startsWith("org.pf4j.")) {
-                return getParent().loadClass(className);
+        public Class<?> loadClass(String name, boolean resolve) throws ClassNotFoundException {
+            if (name.startsWith("io.github.jgwoolley.artifactsite.api.")
+                    || name.startsWith("org.pf4j.")) {
+                synchronized (getClassLoadingLock(name)) {
+                    Class<?> c = findLoadedClass(name);
+                    if (c == null) {
+                        try {
+                            c = getParent().loadClass(name);
+                        } catch (ClassNotFoundException ignored) {
+                            // Fall through to super if parent doesn't contain the class
+                        }
+                    }
+                    if (c != null) {
+                        if (resolve) {
+                            resolveClass(c);
+                        }
+                        return c;
+                    }
+                }
             }
 
-            return super.loadClass(className);
+            return super.loadClass(name, resolve);
         }
     }
 
@@ -176,6 +196,14 @@ public class ArtifactSiteGeneratorCli implements Runnable {
             PluginManager pluginManager = parentCommand.createPluginManager();
             pluginManager.loadPlugins();
             pluginManager.startPlugins();
+
+            // Debug: Check raw extension class names discovered by PF4J
+            for (PluginWrapper plugin : pluginManager.getPlugins()) {
+                LOGGER.info("Plugin '{}' extensions: {}",
+                        plugin.getPluginId(),
+                        pluginManager.getExtensionClassNames(plugin.getPluginId()));
+            }
+
             List<ArtifactParserPlugin> parsers = pluginManager.getExtensions(ArtifactParserPlugin.class);
             LOGGER.info("Loaded {} parser plugin(s).", parsers.size());
             parsers.forEach(p -> LOGGER.info("- {}", p.pluginId()));
@@ -199,10 +227,25 @@ public class ArtifactSiteGeneratorCli implements Runnable {
             PluginManager pluginManager = parentCommand.createPluginManager();
             pluginManager.loadPlugins();
             pluginManager.startPlugins();
-            List<ArtifactParserPlugin> parsers = pluginManager.getExtensions(ArtifactParserPlugin.class);
-            LOGGER.info("Loaded {} parser plugin(s).", parsers.size());
+            List<ArtifactParserPlugin> plugins = pluginManager.getExtensions(ArtifactParserPlugin.class);
+            LOGGER.info("Loaded {} parser plugin(s).", plugins.size());
             LOGGER.info("Input: {}", artifactPath.toAbsolutePath());
-            parsers.forEach(p -> LOGGER.info("- {}", p.pluginId()));
+            ArtifactInputDescriptor descriptor = ArtifactInputDescriptor.parseLocal(artifactPath);
+            ArtifactParseContext context = new ArtifactParseContext();
+
+            for(ArtifactParserPlugin plugin: plugins) {
+                final var parser = plugin.parser();
+                if(!parser.supports(descriptor)) {
+                    continue;
+                }
+
+                try {
+                    ArtifactMetadata artifact = parser.parse(descriptor, context);
+                    LOGGER.info("Parsed: {}", artifact);
+                } catch (Exception e) {
+                    LOGGER.warn("Could not parse "+ artifactPath.toString()+ " with " + parser.getClass(), e);
+                }
+            }
         }
     }
 

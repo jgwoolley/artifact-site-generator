@@ -15,12 +15,17 @@
       <groupId>io.github.jgwoolley</groupId>
       <artifactId>artifact-site-plugins-api</artifactId>
       <version>${project.version}</version>
+      <scope>provided</scope>
     </dependency>
+
+    <!-- PF4J Core (contains @Extension and ExtensionAnnotationProcessor) -->
     <dependency>
       <groupId>org.pf4j</groupId>
       <artifactId>pf4j</artifactId>
       <version>${pf4j.version}</version>
+      <scope>provided</scope>
     </dependency>
+
     <dependency>
       <groupId>org.junit.jupiter</groupId>
       <artifactId>junit-jupiter</artifactId>
@@ -38,6 +43,21 @@
     <plugins>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-compiler-plugin</artifactId>
+        <version>3.13.0</version>
+        <configuration>
+          <annotationProcessorPaths>
+            <path>
+              <groupId>org.pf4j</groupId>
+              <artifactId>pf4j</artifactId>
+              <version>${pf4j.version}</version>
+            </path>
+          </annotationProcessorPaths>
+        </configuration>
+      </plugin>
+
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-jar-plugin</artifactId>
         <version>3.4.2</version>
         <configuration>
@@ -51,6 +71,7 @@
           </archive>
         </configuration>
       </plugin>
+
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-surefire-plugin</artifactId>

@@ -1,11 +1,12 @@
 package io.github.jgwoolley.artifactsite.api;
 
 import org.jspecify.annotations.Nullable;
+import org.pf4j.ExtensionPoint;
 
 /**
  * Contract for artifact format parsers.
  */
-public interface ArtifactParser {
+public interface ArtifactParser extends ExtensionPoint {
     /**
      * Determines whether this parser can parse a given input.
      *
