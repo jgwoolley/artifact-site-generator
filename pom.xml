@@ -19,6 +19,7 @@
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <pf4j.version>3.12.0</pf4j.version>
     <picocli.version>4.7.7</picocli.version>
+    <jackson.version>3.0.0</jackson.version>
     <junit.version>5.11.4</junit.version>
   </properties>
 
@@ -31,6 +32,11 @@
         <type>pom</type>
         <scope>import</scope>
       </dependency>
+        <dependency>
+          <groupId>tools.jackson.core</groupId>
+          <artifactId>jackson-databind</artifactId>
+          <version>${jackson.version}</version>
+        </dependency>
     </dependencies>
   </dependencyManagement>
 
