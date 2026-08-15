@@ -16,12 +16,10 @@ import org.jspecify.annotations.Nullable;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 import org.w3c.dom.NodeList;
-import org.pf4j.Extension;
 
 /**
  * Parser for Visual Studio Code VSIX extension packages.
  */
-@Extension
 public class VsixArtifactParser implements ArtifactParser {
     /** {@inheritDoc} */
     @Override
