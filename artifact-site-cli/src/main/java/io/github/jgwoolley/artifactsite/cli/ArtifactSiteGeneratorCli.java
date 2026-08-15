@@ -43,6 +43,7 @@ import tools.jackson.core.type.TypeReference;
         ArtifactSiteGeneratorCli.GenerateCommand.class,
         ArtifactSiteGeneratorCli.ListPluginsCommand.class,
         ArtifactSiteGeneratorCli.ListArtifactsCommand.class,
+        ArtifactSiteGeneratorCli.InfoCommand.class,
 })
 public class ArtifactSiteGeneratorCli implements Runnable {
     private static final Logger LOGGER = LoggerFactory.getLogger(ArtifactSiteGeneratorCli.class);
@@ -51,6 +52,12 @@ public class ArtifactSiteGeneratorCli implements Runnable {
             description = "Additional plugin directory to load from; also used as install target for add-plugin")
     private Path pluginDir;
 
+    @Option(names = "--artifact-json", scope = CommandLine.ScopeType.INHERIT,
+            description = "Specifies the artifact json to store parsed artifact information")
+    private Path artifactJsonPath;
+    
+    private ObjectMapper objectMapper = new ObjectMapper();
+    
     /**
      * Application main method.
      *
@@ -69,10 +76,53 @@ public class ArtifactSiteGeneratorCli implements Runnable {
         LOGGER.info(System.lineSeparator() + usageWriter);
     }
 
-    Path installPluginDir() {
+    /***
+     * 
+     * @return
+     */
+    private Path installPluginDir() {
         return pluginDir == null ? XdgPaths.pluginDir() : pluginDir;
     }
+    
+    /***
+     * 
+     * @return
+     */
+    private Path artifactJsonPath() {
+        return artifactJsonPath == null ? XdgPaths.artifactJsonPath() : artifactJsonPath;
+    }
 
+    private ArtifactsByParser loadArtifacts() {
+        Path artifactJsonPath = artifactJsonPath();
+        List<ArtifactMetadata> artifactList = new ArrayList<>(1);
+
+        if (Files.exists(artifactJsonPath)) {
+            try (InputStream is = Files.newInputStream(artifactJsonPath)) {
+            	artifactList = objectMapper.readValue(is, new TypeReference<>() {});            
+            } catch(Exception e) {
+                LOGGER.error("Failed to read artifacts", e);
+            }
+        }
+
+        LOGGER.debug("Read Artifacts Count: {}", artifactList.size());
+        
+        ArtifactsByParser artifacts = new ArtifactsByParser();
+        artifacts.load(artifactList);
+        
+        return artifacts;
+    }
+    
+    private void saveArtifacts(List<ArtifactMetadata> artifacts) {
+        Path artifactJsonPath = artifactJsonPath();
+
+        try {                
+        	objectMapper.writeValue(artifactJsonPath, artifacts);
+            LOGGER.info("Wrote Artifacts: {}", artifacts.size());
+        } catch(Exception e) {
+            LOGGER.error("Failed to write artifacts", e);
+        }
+    }
+    
     List<Path> pluginLoadDirs() {
         Path xdgPluginDir = XdgPaths.pluginDir();
         if (pluginDir == null || pluginDir.equals(xdgPluginDir)) {
@@ -160,6 +210,22 @@ public class ArtifactSiteGeneratorCli implements Runnable {
         }
     }
 
+    @Command(name = "info", description = "Prints out info")
+    static class InfoCommand implements Runnable {
+        private static final Logger LOGGER = LoggerFactory.getLogger(InfoCommand.class);
+
+        @ParentCommand
+        private ArtifactSiteGeneratorCli parentCommand;
+        
+    	@Override
+    	public void run() {
+    		Path pluginDir = parentCommand.installPluginDir();
+        	LOGGER.info("pluginDir - {}", pluginDir);
+        	Path artifactJsonPath = parentCommand.artifactJsonPath();
+        	LOGGER.info("artifactJsonPath - {}", artifactJsonPath);
+        }
+    }
+    
     /** Installs parser plugin artifacts in the local plugin directory. */
     @Command(name = "add-plugin", description = "Adds a parser plugin JAR to the plugin directory")
     static class AddPluginCommand implements Runnable {
@@ -175,6 +241,7 @@ public class ArtifactSiteGeneratorCli implements Runnable {
         @Override
         public void run() {
             try {
+            	// TODO: Check if one with higher version is loaded.
                 Path pluginDir = parentCommand.installPluginDir();
                 Files.createDirectories(pluginDir);
                 Path target = pluginDir.resolve(pluginJar.getFileName());
@@ -231,23 +298,12 @@ public class ArtifactSiteGeneratorCli implements Runnable {
             pluginManager.loadPlugins();
             pluginManager.startPlugins();
 
-            Path artifactJsonPath = XdgPaths.artifactJsonPath();
-            List<ArtifactMetadata> artifacts = new ArrayList<>(1);
+            ArtifactsByParser artifacts = parentCommand.loadArtifacts();
 
-            ObjectMapper mapper = new ObjectMapper();
-
-            if (Files.exists(artifactJsonPath)) {
-                try (InputStream is = Files.newInputStream(artifactJsonPath)) {
-                    artifacts = mapper.readValue(is, new TypeReference<>() {});            
-                } catch(Exception e) {
-                    LOGGER.error("Failed to read artifacts", e);
+            for(ArtifactsBySlug artifactsBySlug: artifacts) {
+            	for(ArtifactMetadata artifact: artifactsBySlug) {
+                    LOGGER.info("Artifact: {}", artifact);
                 }
-            }
-
-            LOGGER.debug("Read Artifacts Count: {}", artifacts.size());
-
-            for(ArtifactMetadata artifact: artifacts) {
-                LOGGER.info("Artifact: {}", artifact);
             }
         }
     }
@@ -275,7 +331,7 @@ public class ArtifactSiteGeneratorCli implements Runnable {
             ArtifactInputDescriptor descriptor = ArtifactInputDescriptor.parseLocal(artifactPath);
             ArtifactParseContext context = new ArtifactParseContext();
 
-            Path artifactJsonPath = XdgPaths.artifactJsonPath();
+            Path artifactJsonPath = parentCommand.artifactJsonPath();
             List<ArtifactMetadata> artifacts = new ArrayList<>(1);
 
             ObjectMapper mapper = new ObjectMapper();
@@ -304,13 +360,8 @@ public class ArtifactSiteGeneratorCli implements Runnable {
                     LOGGER.warn("Could not parse "+ artifactPath.toString()+ " with " + parser.getClass(), e);
                 }
             }
-            
-            try {                
-                mapper.writeValue(artifactJsonPath, artifacts);
-                LOGGER.info("Wrote Artifacts: {}", artifacts.size());
-            } catch(Exception e) {
-                LOGGER.error("Failed to write artifacts", e);
-            }
+          
+            parentCommand.saveArtifacts(artifacts);
         }
     }
 

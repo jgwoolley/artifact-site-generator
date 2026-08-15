@@ -121,7 +121,11 @@ public class ArtifactMetadata {
     /** @param pluginId parser plugin id */
     public void setPluginId(@Nullable String pluginId) { this.pluginId = pluginId; }
 
+    public String getSlug() {
+    	return getGroupId() + "." + getArtifactName() + "." + getArtifactId() + "." + getVersion();
+    }
+    
     public String toString() {
-        return getArtifactName() + " (" + getArtifactId() + ", " + getVersion() + ")";
+        return getGroupId() + "." + getArtifactName() + " (" + getArtifactId() + ", " + getVersion() + ")";
     }
 }
