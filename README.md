@@ -82,6 +82,12 @@ Each parsed artifact record should include:
 - `fileSizeBytes`
 - `sha256`
 - `pluginId` (which parser produced this record)
+- `remoteHeaders` (optional list, present for remote sources)
+- `remoteTls` (optional object, present for remote sources)
+  - `insecureSkipVerify` (boolean)
+  - `trustStorePath` (nullable string path)
+  - `clientCertificatePath` (nullable string path)
+  - `clientPrivateKeyPath` (nullable string path)
 
 Catalog storage format:
 
@@ -144,6 +150,18 @@ Behavior:
     - `./public/downloads/<artifactId>/<version>/<fileName>`
     - and set `downloadUrl` to relative path:
       - `/downloads/<artifactId>/<version>/<fileName>`
+
+REMOTE implementation notes (next milestone):
+
+- Parse command should accept either a filesystem path or URL as the first argument.
+- For remote input (`ArtifactSourceType.REMOTE`), download using Apache HttpClient 5 before parser invocation.
+- Add repeatable header flags like `--remote-header "Name: Value"` and attach them to the request.
+- Add TLS flags:
+  - `--remote-tls-insecure` (skip cert validation for local/dev only)
+  - `--remote-tls-trust-store /path/to/truststore-or-ca`
+  - `--remote-tls-client-cert /path/to/client-cert`
+  - `--remote-tls-client-key /path/to/client-key`
+- Persist the effective remote request metadata (`remoteHeaders` and `remoteTls`) with each parsed artifact record.
 
 ### `generate`
 
@@ -217,10 +235,12 @@ Implementation detail:
   - VSIX
 - [x] **Catalog Persistence**
   - JSON catalog read/write/update rules.
-- Break out [ArtifactSiteGeneratorCli.java](artifact-site-cli/src/main/java/com/nf3t/artifactsite/cli/ArtifactSiteGeneratorCli.java)
-  - It is too large with too many components. Subcommands should be broken up into multiple files its hard to read.
-- [] **Implement ArtifactSourceType.REMOTE**
-  - Use modern version of Apache HttpClient
+- [x] **Break up ArtifactSiteGeneratorCli.java**
+  - Moved CLI subcommands into focused command classes under `artifact-site-cli/src/main/java/com/nf3t/artifactsite/cli/`.
+- [ ] **Implement ArtifactSourceType.REMOTE**
+  - Use Apache HttpClient 5 for download support.
+  - Support CLI-provided TLS settings and HTTP headers.
+  - Persist remote request configuration with artifact metadata.
 - [ ] **Static Generator**
   - FreeMarker templates + output assets.
 - [ ] **OpenVSIX-style UI**
