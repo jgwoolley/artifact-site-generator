@@ -44,7 +44,6 @@
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-compiler-plugin</artifactId>
-        <version>3.13.0</version>
         <configuration>
           <annotationProcessorPaths>
             <path>
@@ -66,7 +65,7 @@
               <Plugin-Id>vsix</Plugin-Id>
               <Plugin-Version>${project.version}</Plugin-Version>
               <Plugin-Provider>jgwoolley</Plugin-Provider>
-              <Plugin-Class>io.github.jgwoolley.artifactsite.plugin.vsix.VsixPf4jPlugin</Plugin-Class>
+              <Plugin-Class>com.nf3t.artifactsite.plugin.vsix.VsixPf4jPlugin</Plugin-Class>
             </manifestEntries>
           </archive>
         </configuration>

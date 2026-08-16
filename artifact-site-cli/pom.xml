@@ -34,7 +34,6 @@
       <dependency>
         <groupId>tools.jackson.core</groupId>
         <artifactId>jackson-databind</artifactId>
-        <version>${jackson.version}</version>
       </dependency>
     <dependency>
       <groupId>org.junit.jupiter</groupId>
@@ -65,7 +64,7 @@
               <createDependencyReducedPom>false</createDependencyReducedPom>
               <transformers>
                 <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
-                  <mainClass>io.github.jgwoolley.artifactsite.cli.ArtifactSiteGeneratorCli</mainClass>
+                  <mainClass>com.nf3t.artifactsite.cli.ArtifactSiteGeneratorCli</mainClass>
                 </transformer>
               </transformers>
             </configuration>

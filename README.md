@@ -215,8 +215,12 @@ Implementation detail:
   - Contracts, validation, metadata schema.
 - [x] **Initial Plugin**
   - VSIX
-- [ ] **Catalog Persistence**
+- [x] **Catalog Persistence**
   - JSON catalog read/write/update rules.
+- Break out [ArtifactSiteGeneratorCli.java](artifact-site-cli/src/main/java/com/nf3t/artifactsite/cli/ArtifactSiteGeneratorCli.java)
+  - It is too large with too many components. Subcommands should be broken up into multiple files its hard to read.
+- [] **Implement ArtifactSourceType.REMOTE**
+  - Use modern version of Apache HttpClient
 - [ ] **Static Generator**
   - FreeMarker templates + output assets.
 - [ ] **OpenVSIX-style UI**
@@ -225,6 +229,11 @@ Implementation detail:
   - Input validation, tests, docs, packaging, release steps.
 - [ ] **More Plugins**
   - VSIX
-  - VSIX parser
-  - NiFi NAR
+  - VintageStory Mod
+  - Chrome Browser Extension
+  - Java JAR / NiFi NAR
   - Maven
+
+## TODO
+
+- Add java modules to src code?
