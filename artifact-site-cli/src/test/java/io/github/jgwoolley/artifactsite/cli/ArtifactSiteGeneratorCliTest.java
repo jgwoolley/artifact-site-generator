@@ -3,16 +3,19 @@ package io.github.jgwoolley.artifactsite.cli;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import io.github.jgwoolley.artifactsite.api.ArtifactParserPlugin;
+import io.github.jgwoolley.artifactsite.api.ArtifactParser;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Collections;
 import java.util.zip.ZipEntry;
 import java.util.jar.JarOutputStream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.pf4j.AbstractPluginManager;
 import org.pf4j.DefaultPluginDescriptor;
+import org.pf4j.DefaultPluginManager;
 import org.pf4j.PluginClassLoader;
 import org.pf4j.PluginLoader;
 import picocli.CommandLine;
@@ -36,6 +39,89 @@ class ArtifactSiteGeneratorCliTest {
 
         assertThat(exitCode).isZero();
         assertThat(Files.readString(installedJar)).isEqualTo("new-plugin-content");
+    }
+
+    @Test
+    void loadParserPluginsFallsBackToArtifactParserExtensions() {
+        ArtifactSiteGeneratorCli cli = new ArtifactSiteGeneratorCli();
+        ArtifactParser parser = new ArtifactParser() {
+            @Override
+            public boolean supports(io.github.jgwoolley.artifactsite.api.ArtifactInputDescriptor descriptor) {
+                return false;
+            }
+
+            @Override
+            public io.github.jgwoolley.artifactsite.api.ArtifactMetadata parse(
+                    io.github.jgwoolley.artifactsite.api.ArtifactInputDescriptor descriptor,
+                    io.github.jgwoolley.artifactsite.api.ArtifactParseContext context) {
+                return null;
+            }
+        };
+
+        DefaultPluginManager pluginManager = new DefaultPluginManager(Collections.emptyList()) {
+            @Override
+            @SuppressWarnings("unchecked")
+            public <T> List<T> getExtensions(Class<T> type) {
+                if (type == ArtifactParserPlugin.class) {
+                    return List.of();
+                }
+                if (type == ArtifactParser.class) {
+                    return (List<T>) List.of(parser);
+                }
+                return List.of();
+            }
+        };
+
+        List<ArtifactParserPlugin> plugins = cli.loadParserPlugins(pluginManager);
+
+        assertThat(plugins).hasSize(1);
+        assertThat(plugins.get(0).parser()).isSameAs(parser);
+    }
+
+    @Test
+    void loadParserPluginsPrefersArtifactParserPluginExtensions() {
+        ArtifactSiteGeneratorCli cli = new ArtifactSiteGeneratorCli();
+        ArtifactParserPlugin plugin = new ArtifactParserPlugin() {
+            @Override
+            public String pluginId() {
+                return "test";
+            }
+
+            @Override
+            public ArtifactParser parser() {
+                return new ArtifactParser() {
+                    @Override
+                    public boolean supports(io.github.jgwoolley.artifactsite.api.ArtifactInputDescriptor descriptor) {
+                        return false;
+                    }
+
+                    @Override
+                    public io.github.jgwoolley.artifactsite.api.ArtifactMetadata parse(
+                            io.github.jgwoolley.artifactsite.api.ArtifactInputDescriptor descriptor,
+                            io.github.jgwoolley.artifactsite.api.ArtifactParseContext context) {
+                        return null;
+                    }
+                };
+            }
+        };
+
+        DefaultPluginManager pluginManager = new DefaultPluginManager(Collections.emptyList()) {
+            @Override
+            @SuppressWarnings("unchecked")
+            public <T> List<T> getExtensions(Class<T> type) {
+                if (type == ArtifactParserPlugin.class) {
+                    return (List<T>) List.of(plugin);
+                }
+                if (type == ArtifactParser.class) {
+                    return List.of();
+                }
+                return List.of();
+            }
+        };
+
+        List<ArtifactParserPlugin> plugins = cli.loadParserPlugins(pluginManager);
+
+        assertThat(plugins).containsExactly(plugin);
     }
 
     @Test

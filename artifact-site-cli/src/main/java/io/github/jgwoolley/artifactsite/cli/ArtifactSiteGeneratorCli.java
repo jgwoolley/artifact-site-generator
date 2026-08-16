@@ -3,6 +3,7 @@ package io.github.jgwoolley.artifactsite.cli;
 import io.github.jgwoolley.artifactsite.api.ArtifactInputDescriptor;
 import io.github.jgwoolley.artifactsite.api.ArtifactMetadata;
 import io.github.jgwoolley.artifactsite.api.ArtifactParseContext;
+import io.github.jgwoolley.artifactsite.api.ArtifactParser;
 import io.github.jgwoolley.artifactsite.api.ArtifactParserPlugin;
 import java.io.IOException;
 import java.io.PrintWriter;
@@ -134,6 +135,40 @@ public class ArtifactSiteGeneratorCli implements Runnable {
 
     PluginManager createPluginManager() {
         return new ArtifactSitePluginManager(pluginLoadDirs());
+    }
+
+    List<ArtifactParserPlugin> loadParserPlugins(PluginManager pluginManager) {
+        List<ArtifactParserPlugin> plugins = pluginManager.getExtensions(ArtifactParserPlugin.class);
+        if (!plugins.isEmpty()) {
+            return plugins;
+        }
+
+        List<ArtifactParser> parsers = pluginManager.getExtensions(ArtifactParser.class);
+        if (!parsers.isEmpty()) {
+            LOGGER.warn(
+                    "No ArtifactParserPlugin extensions found; falling back to {} ArtifactParser extension(s).",
+                    parsers.size());
+        }
+
+        return parsers.stream().map(ParserOnlyPluginAdapter::new).map(ArtifactParserPlugin.class::cast).toList();
+    }
+
+    private static final class ParserOnlyPluginAdapter implements ArtifactParserPlugin {
+        private final ArtifactParser parser;
+
+        private ParserOnlyPluginAdapter(ArtifactParser parser) {
+            this.parser = parser;
+        }
+
+        @Override
+        public String pluginId() {
+            return parser.getClass().getName();
+        }
+
+        @Override
+        public ArtifactParser parser() {
+            return parser;
+        }
     }
 
     private static final class ArtifactSitePluginManager extends DefaultPluginManager {
@@ -276,7 +311,7 @@ public class ArtifactSiteGeneratorCli implements Runnable {
                         pluginManager.getExtensionClassNames(plugin.getPluginId()));
             }
 
-            List<ArtifactParserPlugin> parsers = pluginManager.getExtensions(ArtifactParserPlugin.class);
+            List<ArtifactParserPlugin> parsers = parentCommand.loadParserPlugins(pluginManager);
             LOGGER.info("Loaded {} parser plugin(s).", parsers.size());
             parsers.forEach(p -> LOGGER.info("- {}", p.pluginId()));
         }
@@ -325,7 +360,7 @@ public class ArtifactSiteGeneratorCli implements Runnable {
             PluginManager pluginManager = parentCommand.createPluginManager();
             pluginManager.loadPlugins();
             pluginManager.startPlugins();
-            List<ArtifactParserPlugin> plugins = pluginManager.getExtensions(ArtifactParserPlugin.class);
+            List<ArtifactParserPlugin> plugins = parentCommand.loadParserPlugins(pluginManager);
             LOGGER.info("Loaded {} parser plugin(s).", plugins.size());
             LOGGER.debug("Input Artifact: {}", artifactPath.toAbsolutePath());
             ArtifactInputDescriptor descriptor = ArtifactInputDescriptor.parseLocal(artifactPath);
