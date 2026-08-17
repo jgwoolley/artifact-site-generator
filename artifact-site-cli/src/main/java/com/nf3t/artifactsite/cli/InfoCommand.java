@@ -24,5 +24,7 @@ class InfoCommand implements Runnable {
         LOGGER.info("pluginDir - {}", pluginDir);
         Path artifactJsonPath = parentCommand.artifactJsonPath();
         LOGGER.info("artifactJsonPath - {}", artifactJsonPath);
+        LOGGER.info("remoteCacheDir - {}", parentCommand.remoteCacheDir());
+        LOGGER.info("remoteRequestConfigPath - {}", parentCommand.remoteRequestConfigPath());
     }
 }

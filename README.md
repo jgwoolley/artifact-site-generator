@@ -155,12 +155,13 @@ REMOTE implementation notes (next milestone):
 
 - Parse command should accept either a filesystem path or URL as the first argument.
 - For remote input (`ArtifactSourceType.REMOTE`), download using Apache HttpClient 5 before parser invocation.
-- Add repeatable header flags like `--remote-header "Name: Value"` and attach them to the request.
+- Add repeatable header flags like `--http-header "Name=Value"` and attach them to the request.
 - Add TLS flags:
-  - `--remote-tls-insecure` (skip cert validation for local/dev only)
   - `--remote-tls-trust-store /path/to/truststore-or-ca`
+  - `--remote-tls-trust-store-password secret`
   - `--remote-tls-client-cert /path/to/client-cert`
   - `--remote-tls-client-key /path/to/client-key`
+  - `--remote-tls-client-key-password secret`
 - Persist the effective remote request metadata (`remoteHeaders` and `remoteTls`) with each parsed artifact record.
 
 ### `generate`
@@ -239,7 +240,7 @@ Implementation detail:
   - JSON catalog read/write/update rules.
 - [x] **Break up ArtifactSiteGeneratorCli.java**
   - Moved CLI subcommands into focused command classes under `artifact-site-cli/src/main/java/com/nf3t/artifactsite/cli/`.
-- [ ] **Implement ArtifactSourceType.REMOTE**
+- [x] **Implement ArtifactSourceType.REMOTE**
   - Use Apache HttpClient 5 for download support.
   - Support CLI-provided TLS settings and HTTP headers.
   - Persist remote request configuration with artifact metadata. But seperate from artifacts.json (because artifacts.json will be used by static site generator)

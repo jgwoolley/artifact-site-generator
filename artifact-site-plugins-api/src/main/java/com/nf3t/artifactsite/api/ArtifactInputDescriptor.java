@@ -1,6 +1,7 @@
 package com.nf3t.artifactsite.api;
 
 import java.io.IOException;
+import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
@@ -31,5 +32,26 @@ public record ArtifactInputDescriptor(
 
         }
         return new ArtifactInputDescriptor(ArtifactSourceType.LOCAL, path.toString(), path.getFileName().toString(), extension, contentType);
+    }
+
+    /**
+     * Builds a descriptor for a remote artifact URL.
+     *
+     * @param url remote artifact URL
+     * @param fileName resolved file name, if known
+     * @param contentType resolved content type, if known
+     * @return remote artifact descriptor
+     */
+    public static ArtifactInputDescriptor parseRemote(String url, @Nullable String fileName, @Nullable String contentType) {
+        String resolvedFileName = fileName;
+        if (resolvedFileName == null || resolvedFileName.isBlank()) {
+            String path = URI.create(url).getPath();
+            int lastSeparator = path.lastIndexOf('/');
+            if (lastSeparator >= 0 && lastSeparator < path.length() - 1) {
+                resolvedFileName = path.substring(lastSeparator + 1);
+            }
+        }
+        String extension = resolvedFileName == null ? null : PathUtils.getExtension(Path.of(resolvedFileName));
+        return new ArtifactInputDescriptor(ArtifactSourceType.REMOTE, url, resolvedFileName, extension, contentType);
     }
 }
