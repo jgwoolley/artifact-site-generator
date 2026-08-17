@@ -92,6 +92,14 @@ public class ArtifactSiteGeneratorCli implements Runnable {
         return artifactJsonPath == null ? XdgPaths.artifactJsonPath() : artifactJsonPath;
     }
 
+    Path remoteCacheDir() {
+        return XdgPaths.remoteCacheDir();
+    }
+
+    Path remoteRequestConfigPath() {
+        return XdgPaths.remoteRequestConfigPath();
+    }
+
     ArtifactsByParser loadArtifacts() {
         Path artifactJsonPath = artifactJsonPath();
         List<ArtifactMetadata> artifactList = new ArrayList<>(1);
@@ -117,10 +125,39 @@ public class ArtifactSiteGeneratorCli implements Runnable {
         Path artifactJsonPath = artifactJsonPath();
 
         try {
+            if (artifactJsonPath.getParent() != null) {
+                Files.createDirectories(artifactJsonPath.getParent());
+            }
         	objectMapper.writeValue(artifactJsonPath, artifactList);
             LOGGER.info("Wrote {} artifact(s) to {}", artifactList.size(), artifactJsonPath);
         } catch(Exception e) {
             LOGGER.error("Failed to write artifacts", e);
+        }
+    }
+
+    RemoteRequestConfigStore loadRemoteRequestConfigStore() {
+        Path configPath = remoteRequestConfigPath();
+        if (!Files.exists(configPath)) {
+            return new RemoteRequestConfigStore();
+        }
+        try (InputStream is = Files.newInputStream(configPath)) {
+            RemoteRequestConfigStore store = objectMapper.readValue(is, RemoteRequestConfigStore.class);
+            return store == null ? new RemoteRequestConfigStore() : store;
+        } catch (Exception e) {
+            LOGGER.error("Failed to read remote request config at " + configPath, e);
+            return new RemoteRequestConfigStore();
+        }
+    }
+
+    void saveRemoteRequestConfigStore(RemoteRequestConfigStore store) {
+        Path configPath = remoteRequestConfigPath();
+        try {
+            if (configPath.getParent() != null) {
+                Files.createDirectories(configPath.getParent());
+            }
+            objectMapper.writeValue(configPath, store);
+        } catch (Exception e) {
+            LOGGER.error("Failed to write remote request config", e);
         }
     }
 

@@ -6,6 +6,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.jar.JarOutputStream;
 import java.util.zip.ZipEntry;
@@ -20,6 +21,7 @@ import org.pf4j.PluginLoader;
 
 import com.nf3t.artifactsite.api.ArtifactParser;
 import com.nf3t.artifactsite.api.ArtifactParserPlugin;
+import com.nf3t.artifactsite.api.ArtifactSourceType;
 
 import picocli.CommandLine;
 
@@ -135,6 +137,59 @@ class ArtifactSiteGeneratorCliTest {
         new CommandLine(cli).parseArgs("--plugin-dir", customPluginDir.toString(), "generate");
 
         assertThat(cli.pluginLoadDirs()).isEqualTo(List.of(XdgPaths.pluginDir(), customPluginDir));
+    }
+
+    @Test
+    void artifactInputDescriptorParseRemoteResolvesSourceAndExtension() {
+        var descriptor = com.nf3t.artifactsite.api.ArtifactInputDescriptor.parseRemote(
+                "https://example.com/releases/sample.vsix",
+                null,
+                "application/zip");
+
+        assertThat(descriptor.sourceType()).isEqualTo(ArtifactSourceType.REMOTE);
+        assertThat(descriptor.sourceValue()).isEqualTo("https://example.com/releases/sample.vsix");
+        assertThat(descriptor.fileName()).isEqualTo("sample.vsix");
+        assertThat(descriptor.extension()).isEqualTo("vsix");
+    }
+
+    @Test
+    void remoteRequestConfigIsPersistedOutsideArtifactsJson() {
+        String originalUserHome = System.getProperty("user.home");
+        System.setProperty("user.home", tempDir.toString());
+        try {
+            ArtifactSiteGeneratorCli cli = new ArtifactSiteGeneratorCli();
+            RemoteRequestConfigStore store = new RemoteRequestConfigStore();
+            RemoteRequestConfig config = new RemoteRequestConfig();
+            config.setArtifactId("publisher:artifact:1.0.0");
+            config.setSourceType("remote");
+            config.setSourceValue("https://example.com/sample.vsix");
+            config.setCachedPath(tempDir.resolve("cache/sample.vsix").toString());
+            LinkedHashMap<String, String> headers = new LinkedHashMap<>();
+            headers.put("Authorization", "******");
+            config.setHeaders(headers);
+            RemoteTlsConfig tls = new RemoteTlsConfig();
+            tls.setTrustStorePath(tempDir.resolve("truststore.p12").toString());
+            tls.setClientCertificatePath(tempDir.resolve("client.crt").toString());
+            tls.setClientPrivateKeyPath(tempDir.resolve("client.key").toString());
+            tls.setClientPrivateKeyPassword("secret");
+            config.setTls(tls);
+            store.put("publisher:artifact:1.0.0", config);
+
+            cli.saveRemoteRequestConfigStore(store);
+            RemoteRequestConfigStore loaded = cli.loadRemoteRequestConfigStore();
+
+            assertThat(Files.exists(XdgPaths.remoteRequestConfigPath())).isTrue();
+            assertThat(Files.exists(XdgPaths.artifactJsonPath())).isFalse();
+            assertThat(loaded.getRequestsByArtifactId()).containsKey("publisher:artifact:1.0.0");
+            assertThat(loaded.getRequestsByArtifactId().get("publisher:artifact:1.0.0").getHeaders())
+                    .containsEntry("Authorization", "******");
+            assertThat(loaded.getRequestsByArtifactId().get("publisher:artifact:1.0.0").getTls())
+                    .isNotNull();
+            assertThat(loaded.getRequestsByArtifactId().get("publisher:artifact:1.0.0").getTls().getClientPrivateKeyPassword())
+                    .isEqualTo("secret");
+        } finally {
+            System.setProperty("user.home", originalUserHome);
+        }
     }
 
     // @Test
