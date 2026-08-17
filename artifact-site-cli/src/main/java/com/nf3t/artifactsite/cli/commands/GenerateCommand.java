@@ -50,6 +50,29 @@ public class GenerateCommand implements Runnable {
     @Option(names = "--output", description = "Output directory for generated static site", defaultValue = "./public")
     private Path outputDir;
 
+    @Option(names = "--bannerText", description = "Optional banner text displayed at the top of every generated page")
+    private String bannerText;
+
+    @Option(
+            names = "--bannerTextColorDark",
+            description = "Optional dark mode banner text color (CSS color value)")
+    private String bannerTextColorDark;
+
+    @Option(
+            names = "--bannerBackgroundColorDark",
+            description = "Optional dark mode banner background color (CSS color value)")
+    private String bannerBackgroundColorDark;
+
+    @Option(
+            names = "--bannerTextColorLight",
+            description = "Optional light mode banner text color (CSS color value)")
+    private String bannerTextColorLight;
+
+    @Option(
+            names = "--bannerBackgroundColorLight",
+            description = "Optional light mode banner background color (CSS color value)")
+    private String bannerBackgroundColorLight;
+
     /**
      * Executes static site generation and writes all pages and assets.
      */
@@ -207,6 +230,7 @@ public class GenerateCommand implements Runnable {
                     detailPage.put("fileName", safe(version.getFileName()));
                     detailPage.put("sha256", safe(version.getSha256()));
                     detailPage.put("fileSizeBytes", version.getFileSizeBytes());
+                    detailPage.put("fileSizeHumanReadable", formatFileSize(version.getFileSizeBytes()));
                     detailPage.put("downloadUrl", downloadUrl);
                     detailPage.put("tags", normalizeTags(version.getTags()));
                     detailPage.put("authors", normalizeTags(version.getAuthors()));
@@ -261,9 +285,24 @@ public class GenerateCommand implements Runnable {
             throws IOException, TemplateException {
         Files.createDirectories(outputPath.getParent());
         Template template = configuration.getTemplate(templateName);
+        Map<String, Object> pageData = new HashMap<>(data);
+        applyGlobalTemplateOptions(pageData);
         try (Writer writer = Files.newBufferedWriter(outputPath, StandardCharsets.UTF_8)) {
-            template.process(data, writer);
+            template.process(pageData, writer);
         }
+    }
+
+    /**
+     * Applies global template options shared by every generated page.
+     *
+     * @param pageData mutable page data map
+     */
+    private void applyGlobalTemplateOptions(Map<String, Object> pageData) {
+        pageData.put("bannerText", safe(bannerText));
+        pageData.put("bannerTextColorDark", safe(bannerTextColorDark));
+        pageData.put("bannerBackgroundColorDark", safe(bannerBackgroundColorDark));
+        pageData.put("bannerTextColorLight", safe(bannerTextColorLight));
+        pageData.put("bannerBackgroundColorLight", safe(bannerBackgroundColorLight));
     }
 
     private void writeSearchIndex(Path outputPath, List<Map<String, Object>> searchEntries) throws IOException {
@@ -421,6 +460,30 @@ public class GenerateCommand implements Runnable {
             return artifact.getArtifactName();
         }
         return artifact.getArtifactSlug();
+    }
+
+    /**
+     * Formats a file size in bytes into a human-readable binary unit string.
+     *
+     * @param bytes file size in bytes
+     * @return human-readable size, or empty string when unknown
+     */
+    private static String formatFileSize(Long bytes) {
+        if (bytes == null || bytes < 0) {
+            return "";
+        }
+        if (bytes < 1024) {
+            return bytes + " B";
+        }
+
+        String[] units = { "KB", "MB", "GB", "TB", "PB" };
+        double value = bytes.doubleValue();
+        int unitIndex = -1;
+        while (value >= 1024 && unitIndex < units.length - 1) {
+            value /= 1024;
+            unitIndex++;
+        }
+        return String.format(Locale.ROOT, "%.1f %s", value, units[unitIndex]);
     }
 
     private static boolean isBlank(String value) {

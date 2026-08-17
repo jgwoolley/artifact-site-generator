@@ -175,6 +175,17 @@ artifact-site-generator generate --output ./public
 - Reads catalog and renders static files.
 - Produces all pages, assets, and search index.
 - Never requires a runtime backend service.
+- Generated pages automatically support light/dark mode via system preference.
+- Optional banner can be added globally:
+
+```sh
+artifact-site-generator generate \
+  --bannerText="This application is in beta" \
+  --bannerTextColorDark="black" \
+  --bannerBackgroundColorDark="white" \
+  --bannerTextColorLight="black" \
+  --bannerBackgroundColorLight="white"
+```
 
 ## Static Site Construction Plan
 
