@@ -242,7 +242,7 @@ Implementation detail:
 - [ ] **Implement ArtifactSourceType.REMOTE**
   - Use Apache HttpClient 5 for download support.
   - Support CLI-provided TLS settings and HTTP headers.
-  - Persist remote request configuration with artifact metadata.
+  - Persist remote request configuration with artifact metadata. But seperate from artifacts.json (because artifacts.json will be used by static site generator)
 - [ ] **Static Generator**
   - FreeMarker templates + output assets.
 - [ ] **OpenVSIX-style UI**
