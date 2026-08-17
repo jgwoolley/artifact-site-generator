@@ -1,4 +1,4 @@
-package com.nf3t.artifactsite.cli;
+package com.nf3t.artifactsite.cli.commands;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -6,6 +6,8 @@ import java.nio.file.Path;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import com.nf3t.artifactsite.cli.ArtifactSiteGeneratorCli;
 
 import picocli.CommandLine;
 import picocli.CommandLine.Command;
@@ -15,7 +17,7 @@ import picocli.CommandLine.ParentCommand;
  * Removes plugins in the local plugin directory.
  */
 @Command(name = "clear-plugins", description = "Adds a parser plugin JAR to the plugin directory")
-class ClearPluginCommand implements Runnable {
+public class ClearPluginCommand implements Runnable {
     private static final Logger LOGGER = LoggerFactory.getLogger(ClearPluginCommand.class);
 
     @ParentCommand

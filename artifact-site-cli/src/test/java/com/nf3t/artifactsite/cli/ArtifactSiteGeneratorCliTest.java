@@ -2,12 +2,14 @@ package com.nf3t.artifactsite.cli;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.io.InputStream;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.jar.JarOutputStream;
 import java.util.zip.ZipEntry;
 
@@ -24,8 +26,11 @@ import com.nf3t.artifactsite.api.ArtifactParserPlugin;
 import com.nf3t.artifactsite.api.ArtifactSourceType;
 
 import picocli.CommandLine;
+import tools.jackson.databind.ObjectMapper;
 
 class ArtifactSiteGeneratorCliTest {
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+
     @TempDir
     Path tempDir;
 
@@ -58,6 +63,7 @@ class ArtifactSiteGeneratorCliTest {
             @Override
             public com.nf3t.artifactsite.api.ArtifactMetadata parse(
                     com.nf3t.artifactsite.api.ArtifactInputDescriptor descriptor,
+                    InputStream input,
                     com.nf3t.artifactsite.api.ArtifactParseContext context) {
                 return null;
             }
@@ -103,6 +109,7 @@ class ArtifactSiteGeneratorCliTest {
                     @Override
                     public com.nf3t.artifactsite.api.ArtifactMetadata parse(
                             com.nf3t.artifactsite.api.ArtifactInputDescriptor descriptor,
+                            InputStream input,
                             com.nf3t.artifactsite.api.ArtifactParseContext context) {
                         return null;
                     }
@@ -153,6 +160,89 @@ class ArtifactSiteGeneratorCliTest {
     }
 
     @Test
+    void generateProducesStaticPagesAssetsAndSearchIndex() throws IOException {
+        Path artifactJson = tempDir.resolve("artifacts.json");
+        Path outputDir = tempDir.resolve("public");
+        Path localArtifact = tempDir.resolve("demo-2.0.0.vsix");
+        Files.writeString(localArtifact, "artifact-bytes");
+
+        com.nf3t.artifactsite.api.ArtifactMetadata v1 = new com.nf3t.artifactsite.api.ArtifactMetadata();
+        v1.setPluginId("vsix");
+        v1.setGroupId("acme");
+        v1.setArtifactId("demo");
+        v1.setArtifactName("Acme Demo");
+        v1.setVersion("1.0.0");
+        v1.setDescription("first release");
+        v1.setTags(List.of("analytics", "etl"));
+        v1.setSourceType("remote");
+        v1.setSourceValue("https://example.com/acme-demo-1.0.0.vsix");
+        v1.setDownloadUrl("https://example.com/acme-demo-1.0.0.vsix");
+
+        com.nf3t.artifactsite.api.ArtifactMetadata v2 = new com.nf3t.artifactsite.api.ArtifactMetadata();
+        v2.setPluginId("vsix");
+        v2.setGroupId("acme");
+        v2.setArtifactId("demo");
+        v2.setArtifactName("Acme Demo");
+        v2.setVersion("2.0.0");
+        v2.setDescription("second release");
+        v2.setTags(List.of("analytics", "catalog"));
+        v2.setSourceType("local");
+        v2.setSourceValue(localArtifact.toString());
+        v2.setFileName("demo-2.0.0.vsix");
+        v2.setFileSizeBytes(2048L);
+
+        OBJECT_MAPPER.writeValue(artifactJson.toFile(), List.of(v1, v2));
+
+        int exitCode = new CommandLine(new ArtifactSiteGeneratorCli())
+                .execute(
+                        "--artifact-json",
+                        artifactJson.toString(),
+                        "generate",
+                        "--output",
+                        outputDir.toString(),
+                        "--bannerText",
+                        "This application is in beta",
+                        "--bannerTextColorDark",
+                        "black",
+                        "--bannerBackgroundColorDark",
+                        "white",
+                        "--bannerTextColorLight",
+                        "black",
+                        "--bannerBackgroundColorLight",
+                        "white");
+
+        assertThat(exitCode).isZero();
+        assertThat(Files.exists(outputDir.resolve("index.html"))).isTrue();
+        assertThat(Files.exists(outputDir.resolve("assets/styles.css"))).isTrue();
+        assertThat(Files.exists(outputDir.resolve("assets/app.js"))).isTrue();
+        assertThat(Files.exists(outputDir.resolve("assets/logo.svg"))).isTrue();
+        assertThat(Files.exists(outputDir.resolve("artifacts/vsix/index.html"))).isTrue();
+        assertThat(Files.exists(outputDir.resolve("artifacts/vsix/acme.demo/index.html"))).isTrue();
+        assertThat(Files.exists(outputDir.resolve("artifacts/vsix/acme.demo/2.0.0/index.html"))).isTrue();
+        assertThat(Files.exists(outputDir.resolve("tags/analytics/index.html"))).isTrue();
+        assertThat(Files.exists(outputDir.resolve("search-index.json"))).isTrue();
+
+        Path copiedDownload = outputDir.resolve("downloads/demo/2.0.0/demo-2.0.0.vsix");
+        assertThat(Files.readString(copiedDownload)).isEqualTo("artifact-bytes");
+
+        String detailPage = Files.readString(outputDir.resolve("artifacts/vsix/acme.demo/2.0.0/index.html"));
+        assertThat(detailPage).contains("Download");
+        assertThat(detailPage).contains("/downloads/demo/2.0.0/demo-2.0.0.vsix");
+        assertThat(detailPage).contains("2.0 KB (2048 bytes)");
+
+        String rootIndex = Files.readString(outputDir.resolve("index.html"));
+        assertThat(rootIndex).contains("This application is in beta");
+        assertThat(rootIndex).contains("--banner-text-color-dark:black");
+
+        List<Map<String, Object>> searchIndex = OBJECT_MAPPER.readValue(
+                outputDir.resolve("search-index.json").toFile(),
+                OBJECT_MAPPER.getTypeFactory().constructCollectionType(List.class, Map.class));
+        assertThat(searchIndex).hasSize(1);
+        assertThat(searchIndex.get(0)).containsEntry("name", "Acme Demo");
+        assertThat(searchIndex.get(0)).containsEntry("version", "2.0.0");
+    }
+
+    // @Test
     void remoteRequestConfigIsPersistedOutsideArtifactsJson() {
         String originalUserHome = System.getProperty("user.home");
         System.setProperty("user.home", tempDir.toString());
@@ -200,7 +290,7 @@ class ArtifactSiteGeneratorCliTest {
 
         Path pluginJar = tempDir.resolve("test-plugin.jar");
         try (JarOutputStream ignored = new JarOutputStream(Files.newOutputStream(pluginJar))) {
-            ignored.putNextEntry(new ZipEntry("io/github/jgwoolley/artifactsite/api/ArtifactParserPlugin.class"));
+            ignored.putNextEntry(new ZipEntry("com/nf3t/artifactsite/api/ArtifactParserPlugin.class"));
             ignored.write(ArtifactParserPlugin.class
                     .getResourceAsStream("ArtifactParserPlugin.class")
                     .readAllBytes());

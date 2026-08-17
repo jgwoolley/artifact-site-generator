@@ -2,7 +2,7 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
 
-  <groupId>io.github.jgwoolley</groupId>
+  <groupId>com.nf3t</groupId>
   <artifactId>artifact-site-parent</artifactId>
   <version>0.1.0-SNAPSHOT</version>
   <packaging>pom</packaging>
@@ -11,6 +11,7 @@
     <module>artifact-site-plugins-api</module>
     <module>artifact-site-cli</module>
     <module>artifact-site-plugin-vsix</module>
+    <module>artifact-site-plugin-maven</module>
   </modules>
 
   <properties>

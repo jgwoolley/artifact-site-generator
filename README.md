@@ -41,6 +41,8 @@ Create a Maven multi-module project:
   - Main executable CLI, plugin loading, parse pipeline, static site generation
 - `artifact-site-plugin-vsix`
   - VSIX parser plugin
+- `artifact-site-plugin-maven`
+  - Maven/JAR parser plugin
 - `artifact-site-plugin-nifi-nar`
   - Apache NiFi NAR parser plugin
 
@@ -102,7 +104,7 @@ Define in `artifact-site-plugins-api`:
 - `ArtifactParserPlugin` (PF4J extension point)
 - `ArtifactParser` interface:
   - `supports(ArtifactInputDescriptor descriptor): boolean`
-  - `parse(ArtifactInput input, ArtifactParseContext context): ArtifactMetadata`
+  - `parse(ArtifactInputDescriptor descriptor, InputStream input, ArtifactParseContext context): ArtifactMetadata`
 - `ArtifactInputDescriptor`:
   - input type, file name, extension, content type hints
 - `ArtifactParseContext`:
@@ -173,6 +175,17 @@ artifact-site-generator generate --output ./public
 - Reads catalog and renders static files.
 - Produces all pages, assets, and search index.
 - Never requires a runtime backend service.
+- Generated pages automatically support light/dark mode via system preference.
+- Optional banner can be added globally:
+
+```sh
+artifact-site-generator generate \
+  --bannerText="This application is in beta" \
+  --bannerTextColorDark="black" \
+  --bannerBackgroundColorDark="white" \
+  --bannerTextColorLight="black" \
+  --bannerBackgroundColorLight="white"
+```
 
 ## Static Site Construction Plan
 
@@ -244,19 +257,24 @@ Implementation detail:
   - Use Apache HttpClient 5 for download support.
   - Support CLI-provided TLS settings and HTTP headers.
   - Persist remote request configuration with artifact metadata. But seperate from artifacts.json (because artifacts.json will be used by static site generator)
-- [ ] **Static Generator**
+- [x] **Static Generator**
   - FreeMarker templates + output assets.
-- [ ] **OpenVSIX-style UI**
-  - Listing/detail pages + client-side search/filter.
-- [ ] **Hardening**
-  - Input validation, tests, docs, packaging, release steps.
+- [x] **OpenVSIX-style UI**
+  - Listing/detail pages
+- [ ] client-side search/filter.
 - [ ] **More Plugins**
-  - VSIX
+  - [x] VSIX
   - VintageStory Mod
   - Chrome Browser Extension
-  - Java JAR / NiFi NAR
-  - Maven
+  - [x] Java JAR / Maven
+  - NiFi NAR
+- [ ] Fix search
+- [ ] **Hardening**
+  - Input validation, tests, docs, packaging, release steps.
 
 ## TODO
 
 - Add java modules to src code?
+- File Size should be human readable
+- Search doesn't work.
+- More sensible commands like "artifact add" "plugin add" "artifact clear" "plugin clear"s

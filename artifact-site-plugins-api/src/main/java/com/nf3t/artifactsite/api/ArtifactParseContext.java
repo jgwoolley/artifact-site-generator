@@ -29,11 +29,20 @@ public class ArtifactParseContext {
             }
         }
 
-        StringBuilder sb = new StringBuilder();
-        for (byte b : digest.digest()) {
-            sb.append(String.format("%02x", b));
-        }
-        return sb.toString();
+        return toHex(digest.digest());
+    }
+
+    /**
+     * Computes the SHA-256 digest for bytes.
+     *
+     * @param content content to hash
+     * @return lowercase hex SHA-256 digest
+     * @throws Exception when hashing fails
+     */
+    public String sha256(byte[] content) throws Exception {
+        MessageDigest digest = MessageDigest.getInstance("SHA-256");
+        digest.update(content);
+        return toHex(digest.digest());
     }
 
     /**
@@ -56,5 +65,13 @@ public class ArtifactParseContext {
      */
     public Path createTempDirectory(String prefix) throws IOException {
         return Files.createTempDirectory(prefix);
+    }
+
+    private static String toHex(byte[] bytes) {
+        StringBuilder sb = new StringBuilder();
+        for (byte b : bytes) {
+            sb.append(String.format("%02x", b));
+        }
+        return sb.toString();
     }
 }
