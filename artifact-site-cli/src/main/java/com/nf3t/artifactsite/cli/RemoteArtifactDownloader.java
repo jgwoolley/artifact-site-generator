@@ -43,9 +43,9 @@ import org.jspecify.annotations.Nullable;
 /**
  * Downloads remote artifacts into the local cache.
  */
-final class RemoteArtifactDownloader {
+public final class RemoteArtifactDownloader {
 
-    RemoteDownloadResult download(String url, Map<String, String> headers, @Nullable RemoteTlsConfig tls, Path cacheDir)
+    public RemoteDownloadResult download(String url, Map<String, String> headers, @Nullable RemoteTlsConfig tls, Path cacheDir)
             throws IOException, GeneralSecurityException {
         Files.createDirectories(cacheDir);
 

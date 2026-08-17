@@ -1,4 +1,4 @@
-package com.nf3t.artifactsite.cli;
+package com.nf3t.artifactsite.cli.commands;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -7,6 +7,8 @@ import java.nio.file.StandardCopyOption;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import com.nf3t.artifactsite.cli.ArtifactSiteGeneratorCli;
 
 import picocli.CommandLine;
 import picocli.CommandLine.Command;
@@ -17,7 +19,7 @@ import picocli.CommandLine.ParentCommand;
  * Installs parser plugin artifacts in the local plugin directory.
  */
 @Command(name = "add-plugin", description = "Adds a parser plugin JAR to the plugin directory")
-class AddPluginCommand implements Runnable {
+public class AddPluginCommand implements Runnable {
     private static final Logger LOGGER = LoggerFactory.getLogger(AddPluginCommand.class);
 
     @ParentCommand

@@ -25,6 +25,7 @@ public class ArtifactMetadata {
     private long fileSizeBytes;
     private @Nullable String sha256;
     private @Nullable String pluginId;
+    private @Nullable String scmUrl;
 
     /** @return stable artifact identifier */
     public @Nullable String getId() { return id; }
@@ -122,6 +123,10 @@ public class ArtifactMetadata {
     /** @param pluginId parser plugin id */
     public void setPluginId(@Nullable String pluginId) { this.pluginId = pluginId; }
 
+    public @Nullable String getScmUrl() { return scmUrl; }
+    
+    public void setScmUrl(@Nullable String scmUrl) { this.scmUrl = scmUrl; }
+    
     public String getArtifactSlug() {
     	return getGroupId() + "." + getArtifactId();
     }

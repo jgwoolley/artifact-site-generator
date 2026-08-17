@@ -1,4 +1,4 @@
-package com.nf3t.artifactsite.cli;
+package com.nf3t.artifactsite.cli.commands;
 
 import java.net.URI;
 import java.nio.file.Path;
@@ -15,6 +15,13 @@ import com.nf3t.artifactsite.api.ArtifactMetadata;
 import com.nf3t.artifactsite.api.ArtifactParseContext;
 import com.nf3t.artifactsite.api.ArtifactParserPlugin;
 import com.nf3t.artifactsite.api.ArtifactSourceType;
+import com.nf3t.artifactsite.cli.RemoteDownloadResult;
+import com.nf3t.artifactsite.cli.RemoteRequestConfig;
+import com.nf3t.artifactsite.cli.RemoteRequestConfigStore;
+import com.nf3t.artifactsite.cli.RemoteTlsConfig;
+import com.nf3t.artifactsite.cli.ArtifactSiteGeneratorCli;
+import com.nf3t.artifactsite.cli.ArtifactsByParser;
+import com.nf3t.artifactsite.cli.RemoteArtifactDownloader;
 
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
@@ -25,7 +32,7 @@ import picocli.CommandLine.ParentCommand;
  * Loads parser plugins and parses an input artifact path.
  */
 @Command(name = "parse", description = "Loads parser plugins and prints the first plugin that supports the input")
-class ParseCommand implements Runnable {
+public class ParseCommand implements Runnable {
     private static final Logger LOGGER = LoggerFactory.getLogger(ParseCommand.class);
 
     @ParentCommand

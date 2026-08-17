@@ -1,4 +1,4 @@
-package com.nf3t.artifactsite.cli;
+package com.nf3t.artifactsite.cli.commands;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -24,6 +24,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.nf3t.artifactsite.api.ArtifactMetadata;
+import com.nf3t.artifactsite.cli.ArtifactSiteGeneratorCli;
 
 import freemarker.template.Configuration;
 import freemarker.template.Template;
@@ -38,7 +39,7 @@ import tools.jackson.databind.ObjectMapper;
  * Generates a static artifact registry site from catalog metadata.
  */
 @Command(name = "generate", description = "Generates a static artifact registry site")
-class GenerateCommand implements Runnable {
+public class GenerateCommand implements Runnable {
     private static final Logger LOGGER = LoggerFactory.getLogger(GenerateCommand.class);
     private static final Pattern SANITIZE_SEGMENT = Pattern.compile("[^a-zA-Z0-9._-]");
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();

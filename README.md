@@ -248,14 +248,16 @@ Implementation detail:
   - FreeMarker templates + output assets.
 - [x] **OpenVSIX-style UI**
   - Listing/detail pages + client-side search/filter.
-- [ ] **Hardening**
-  - Input validation, tests, docs, packaging, release steps.
 - [ ] **More Plugins**
   - VSIX
   - VintageStory Mod
   - Chrome Browser Extension
   - Java JAR / NiFi NAR
   - Maven
+- [ ] Fix search
+- [ ] **Hardening**
+  - Input validation, tests, docs, packaging, release steps.
+
 
 ## TODO
 

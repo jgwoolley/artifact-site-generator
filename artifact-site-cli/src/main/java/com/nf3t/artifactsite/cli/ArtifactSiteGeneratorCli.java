@@ -1,6 +1,5 @@
 package com.nf3t.artifactsite.cli;
 
-import java.io.IOException;
 import java.io.InputStream;
 import java.io.PrintWriter;
 import java.io.StringWriter;
@@ -21,11 +20,16 @@ import org.pf4j.PluginManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.nf3t.artifactsite.api.ArtifactInputDescriptor;
 import com.nf3t.artifactsite.api.ArtifactMetadata;
-import com.nf3t.artifactsite.api.ArtifactParseContext;
 import com.nf3t.artifactsite.api.ArtifactParser;
 import com.nf3t.artifactsite.api.ArtifactParserPlugin;
+import com.nf3t.artifactsite.cli.commands.AddPluginCommand;
+import com.nf3t.artifactsite.cli.commands.ClearPluginCommand;
+import com.nf3t.artifactsite.cli.commands.GenerateCommand;
+import com.nf3t.artifactsite.cli.commands.InfoCommand;
+import com.nf3t.artifactsite.cli.commands.ListArtifactsCommand;
+import com.nf3t.artifactsite.cli.commands.ListPluginsCommand;
+import com.nf3t.artifactsite.cli.commands.ParseCommand;
 
 import picocli.CommandLine;
 import picocli.CommandLine.Command;
@@ -80,7 +84,7 @@ public class ArtifactSiteGeneratorCli implements Runnable {
      *
      * @return
      */
-    Path installPluginDir() {
+    public Path installPluginDir() {
         return pluginDir == null ? XdgPaths.pluginDir() : pluginDir;
     }
 
@@ -88,19 +92,19 @@ public class ArtifactSiteGeneratorCli implements Runnable {
      *
      * @return
      */
-    Path artifactJsonPath() {
+    public Path artifactJsonPath() {
         return artifactJsonPath == null ? XdgPaths.artifactJsonPath() : artifactJsonPath;
     }
 
-    Path remoteCacheDir() {
+    public Path remoteCacheDir() {
         return XdgPaths.remoteCacheDir();
     }
 
-    Path remoteRequestConfigPath() {
+    public Path remoteRequestConfigPath() {
         return XdgPaths.remoteRequestConfigPath();
     }
 
-    ArtifactsByParser loadArtifacts() {
+    public ArtifactsByParser loadArtifacts() {
         Path artifactJsonPath = artifactJsonPath();
         List<ArtifactMetadata> artifactList = new ArrayList<>(1);
 
@@ -120,7 +124,7 @@ public class ArtifactSiteGeneratorCli implements Runnable {
         return artifacts;
     }
 
-    void saveArtifacts(ArtifactsByParser artifacts) {
+    public void saveArtifacts(ArtifactsByParser artifacts) {
     	List<ArtifactMetadata> artifactList = artifacts.save();
         Path artifactJsonPath = artifactJsonPath();
 
@@ -135,7 +139,7 @@ public class ArtifactSiteGeneratorCli implements Runnable {
         }
     }
 
-    RemoteRequestConfigStore loadRemoteRequestConfigStore() {
+    public RemoteRequestConfigStore loadRemoteRequestConfigStore() {
         Path configPath = remoteRequestConfigPath();
         if (!Files.exists(configPath)) {
             return new RemoteRequestConfigStore();
@@ -149,7 +153,7 @@ public class ArtifactSiteGeneratorCli implements Runnable {
         }
     }
 
-    void saveRemoteRequestConfigStore(RemoteRequestConfigStore store) {
+    public void saveRemoteRequestConfigStore(RemoteRequestConfigStore store) {
         Path configPath = remoteRequestConfigPath();
         try {
             if (configPath.getParent() != null) {
@@ -161,7 +165,7 @@ public class ArtifactSiteGeneratorCli implements Runnable {
         }
     }
 
-    List<Path> pluginLoadDirs() {
+    public List<Path> pluginLoadDirs() {
         Path xdgPluginDir = XdgPaths.pluginDir();
         if (pluginDir == null || pluginDir.equals(xdgPluginDir)) {
             return List.of(xdgPluginDir);
@@ -170,11 +174,11 @@ public class ArtifactSiteGeneratorCli implements Runnable {
         return List.of(xdgPluginDir, pluginDir);
     }
 
-    PluginManager createPluginManager() {
+    public PluginManager createPluginManager() {
         return new ArtifactSitePluginManager(pluginLoadDirs());
     }
 
-    List<ArtifactParserPlugin> loadParserPlugins(PluginManager pluginManager) {
+    public List<ArtifactParserPlugin> loadParserPlugins(PluginManager pluginManager) {
         List<ArtifactParserPlugin> plugins = pluginManager.getExtensions(ArtifactParserPlugin.class);
         if (!plugins.isEmpty()) {
             return plugins;
