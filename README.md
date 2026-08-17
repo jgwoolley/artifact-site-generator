@@ -184,8 +184,10 @@ Use FreeMarker templates in `artifact-site-cli/src/main/resources/templates`:
 
 Generated output in `./public`:
 
-- `index.html`
-- `artifacts/<artifact-id>/index.html`
+- `index.html`: Table lists unique parsers.
+- `artifacts/<parser-type>/index.html`: Table lists unique `<group-id>.<artifact-id>`, pulls info from latest version.
+- `artifacts/<parser-type>/<group-id>.<artifact-id>/index.html`: Table lists all artifact's versions, sorts by latest.
+- `artifacts/<parser-type>/<group-id>.<artifact-id>/<version>/index.html`
 - `tags/<tag>/index.html`
 - `assets/styles.css`
 - `assets/app.js`
