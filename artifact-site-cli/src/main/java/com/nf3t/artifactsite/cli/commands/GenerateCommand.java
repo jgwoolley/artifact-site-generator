@@ -203,6 +203,7 @@ public class GenerateCommand implements Runnable {
                     detailPage.put("license", safe(version.getLicense()));
                     detailPage.put("sourceType", safe(version.getSourceType()));
                     detailPage.put("sourceValue", safe(version.getSourceValue()));
+                    detailPage.put("scmUrl", safe(version.getScmUrl()));
                     detailPage.put("fileName", safe(version.getFileName()));
                     detailPage.put("sha256", safe(version.getSha256()));
                     detailPage.put("fileSizeBytes", version.getFileSizeBytes());

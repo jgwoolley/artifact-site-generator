@@ -2,6 +2,7 @@ package com.nf3t.artifactsite.cli;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.io.InputStream;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -62,6 +63,7 @@ class ArtifactSiteGeneratorCliTest {
             @Override
             public com.nf3t.artifactsite.api.ArtifactMetadata parse(
                     com.nf3t.artifactsite.api.ArtifactInputDescriptor descriptor,
+                    InputStream input,
                     com.nf3t.artifactsite.api.ArtifactParseContext context) {
                 return null;
             }
@@ -107,6 +109,7 @@ class ArtifactSiteGeneratorCliTest {
                     @Override
                     public com.nf3t.artifactsite.api.ArtifactMetadata parse(
                             com.nf3t.artifactsite.api.ArtifactInputDescriptor descriptor,
+                            InputStream input,
                             com.nf3t.artifactsite.api.ArtifactParseContext context) {
                         return null;
                     }

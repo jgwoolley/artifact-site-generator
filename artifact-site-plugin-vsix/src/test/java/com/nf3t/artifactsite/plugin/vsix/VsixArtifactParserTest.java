@@ -2,6 +2,7 @@ package com.nf3t.artifactsite.plugin.vsix;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.zip.ZipEntry;
@@ -46,12 +47,15 @@ class VsixArtifactParserTest {
             out.closeEntry();
         }
 
-        ArtifactMetadata metadata = parser.parse(new ArtifactInputDescriptor(
-                ArtifactSourceType.LOCAL,
-                vsix.toString(),
-                vsix.getFileName().toString(),
-                "vsix",
-                "application/zip"), new ArtifactParseContext());
+        ArtifactMetadata metadata;
+        try (InputStream input = Files.newInputStream(vsix)) {
+            metadata = parser.parse(new ArtifactInputDescriptor(
+                    ArtifactSourceType.LOCAL,
+                    vsix.toString(),
+                    vsix.getFileName().toString(),
+                    "vsix",
+                    "application/zip"), input, new ArtifactParseContext());
+        }
 
         assertThat(metadata.getArtifactId()).isEqualTo("artifact-id");
         assertThat(metadata.getVersion()).isEqualTo("1.2.3");
@@ -79,12 +83,15 @@ class VsixArtifactParserTest {
             out.closeEntry();
         }
 
-        ArtifactMetadata metadata = parser.parse(new ArtifactInputDescriptor(
-                ArtifactSourceType.LOCAL,
-                vsix.toString(),
-                vsix.getFileName().toString(),
-                "vsix",
-                "application/zip"), new ArtifactParseContext());
+        ArtifactMetadata metadata;
+        try (InputStream input = Files.newInputStream(vsix)) {
+            metadata = parser.parse(new ArtifactInputDescriptor(
+                    ArtifactSourceType.LOCAL,
+                    vsix.toString(),
+                    vsix.getFileName().toString(),
+                    "vsix",
+                    "application/zip"), input, new ArtifactParseContext());
+        }
 
         assertThat(metadata.getArtifactId()).isEqualTo("vscode-artifact");
         assertThat(metadata.getVersion()).isEqualTo("0.0.1");

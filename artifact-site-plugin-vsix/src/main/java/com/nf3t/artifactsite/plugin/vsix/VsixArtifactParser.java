@@ -1,11 +1,10 @@
 package com.nf3t.artifactsite.plugin.vsix;
 
+import java.io.ByteArrayInputStream;
 import java.io.InputStream;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.Objects;
 import java.util.zip.ZipEntry;
-import java.util.zip.ZipFile;
+import java.util.zip.ZipInputStream;
 import javax.xml.parsers.DocumentBuilderFactory;
 import org.jspecify.annotations.Nullable;
 import org.w3c.dom.Document;
@@ -16,7 +15,6 @@ import com.nf3t.artifactsite.api.ArtifactInputDescriptor;
 import com.nf3t.artifactsite.api.ArtifactMetadata;
 import com.nf3t.artifactsite.api.ArtifactParseContext;
 import com.nf3t.artifactsite.api.ArtifactParser;
-import com.nf3t.artifactsite.api.ArtifactSourceType;
 
 /**
  * Parser for Visual Studio Code VSIX extension packages.
@@ -35,18 +33,12 @@ public class VsixArtifactParser implements ArtifactParser {
     }
 
     @Override
-    public ArtifactMetadata parse(ArtifactInputDescriptor descriptor, ArtifactParseContext context) throws Exception {
-        if (descriptor.sourceType() != ArtifactSourceType.LOCAL) {
-            throw new IllegalArgumentException("VSIX parser currently supports local files only.");
-        }
-
-        Path path = Path.of(descriptor.sourceValue());
-        if (!Files.isRegularFile(path)) {
-            throw new IllegalArgumentException("VSIX file does not exist: " + path);
-        }
+    public ArtifactMetadata parse(ArtifactInputDescriptor descriptor, InputStream input, ArtifactParseContext context)
+            throws Exception {
+        byte[] content = input.readAllBytes();
 
         // 1. Parse the document ONCE
-        Document doc = parseManifest(path);
+        Document doc = parseManifest(content);
 
         // 2. Extract values from document
         Element identity = readIdentity(doc);
@@ -66,11 +58,11 @@ public class VsixArtifactParser implements ArtifactParser {
         metadata.setGroupId(groupId);
         metadata.setArtifactName(artifactName);
         metadata.setId(groupId + ":" + artifactId + ":" + version);
-        metadata.setFileName(path.getFileName().toString());
-        metadata.setFileSizeBytes(Files.size(path));
+        metadata.setFileName(descriptor.fileName());
+        metadata.setFileSizeBytes(content.length);
         metadata.setSourceType(descriptor.sourceType().name().toLowerCase());
         metadata.setSourceValue(descriptor.sourceValue());
-        metadata.setSha256(context.sha256(path));
+        metadata.setSha256(context.sha256(content));
         metadata.setPluginId("vsix");
         metadata.setScmUrl(sourceUrl);
         
@@ -113,17 +105,18 @@ public class VsixArtifactParser implements ArtifactParser {
         return value == null || value.isBlank() ? fallback : value.trim();
     }
 
-    private Document parseManifest(Path path) throws Exception {
-        try (ZipFile zipFile = new ZipFile(path.toFile())) {
-            ZipEntry manifest = zipFile.getEntry("extension.vsixmanifest");
-            if (manifest == null) {
-                throw new IllegalArgumentException("VSIX missing extension.vsixmanifest");
-            }
-            try (InputStream in = zipFile.getInputStream(manifest)) {
+    private Document parseManifest(byte[] content) throws Exception {
+        try (ZipInputStream zipInput = new ZipInputStream(new ByteArrayInputStream(content))) {
+            ZipEntry entry;
+            while ((entry = zipInput.getNextEntry()) != null) {
+                if (!"extension.vsixmanifest".equals(entry.getName())) {
+                    continue;
+                }
                 DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
                 factory.setNamespaceAware(false);
-                return factory.newDocumentBuilder().parse(in);
+                return factory.newDocumentBuilder().parse(zipInput);
             }
+            throw new IllegalArgumentException("VSIX missing extension.vsixmanifest");
         }
     }
 }

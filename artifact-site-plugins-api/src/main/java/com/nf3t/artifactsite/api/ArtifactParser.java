@@ -1,5 +1,7 @@
 package com.nf3t.artifactsite.api;
 
+import java.io.InputStream;
+
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -18,9 +20,10 @@ public interface ArtifactParser {
      * Parses a supported input and returns normalized metadata.
      *
      * @param descriptor input descriptor to parse
+     * @param input artifact input stream
      * @param context parse helpers and utilities
      * @return parsed artifact metadata
      * @throws Exception when parsing fails
      */
-    ArtifactMetadata parse(ArtifactInputDescriptor descriptor, ArtifactParseContext context) throws Exception;
+    ArtifactMetadata parse(ArtifactInputDescriptor descriptor, InputStream input, ArtifactParseContext context) throws Exception;
 }

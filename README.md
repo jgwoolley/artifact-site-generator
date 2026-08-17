@@ -41,6 +41,8 @@ Create a Maven multi-module project:
   - Main executable CLI, plugin loading, parse pipeline, static site generation
 - `artifact-site-plugin-vsix`
   - VSIX parser plugin
+- `artifact-site-plugin-maven`
+  - Maven/JAR parser plugin
 - `artifact-site-plugin-nifi-nar`
   - Apache NiFi NAR parser plugin
 
@@ -102,7 +104,7 @@ Define in `artifact-site-plugins-api`:
 - `ArtifactParserPlugin` (PF4J extension point)
 - `ArtifactParser` interface:
   - `supports(ArtifactInputDescriptor descriptor): boolean`
-  - `parse(ArtifactInput input, ArtifactParseContext context): ArtifactMetadata`
+  - `parse(ArtifactInputDescriptor descriptor, InputStream input, ArtifactParseContext context): ArtifactMetadata`
 - `ArtifactInputDescriptor`:
   - input type, file name, extension, content type hints
 - `ArtifactParseContext`:
@@ -249,11 +251,11 @@ Implementation detail:
 - [x] **OpenVSIX-style UI**
   - Listing/detail pages + client-side search/filter.
 - [ ] **More Plugins**
-  - VSIX
+  - [x] VSIX
   - VintageStory Mod
   - Chrome Browser Extension
-  - Java JAR / NiFi NAR
-  - Maven
+    - [x] Java JAR / Maven
+    - NiFi NAR
 - [ ] Fix search
 - [ ] **Hardening**
   - Input validation, tests, docs, packaging, release steps.

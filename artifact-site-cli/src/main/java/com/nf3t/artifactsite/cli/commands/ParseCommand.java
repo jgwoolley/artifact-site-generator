@@ -1,6 +1,8 @@
 package com.nf3t.artifactsite.cli.commands;
 
+import java.io.InputStream;
 import java.net.URI;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -75,6 +77,7 @@ public class ParseCommand implements Runnable {
 
         boolean remoteInput = isRemoteInput(artifactInput);
         ArtifactInputDescriptor descriptor;
+        Path parsePath;
         RemoteDownloadResult remoteDownloadResult = null;
         if (remoteInput) {
             Map<String, String> headers = parseHeaders(httpHeaders);
@@ -86,9 +89,14 @@ public class ParseCommand implements Runnable {
                 LOGGER.error("Unable to download remote artifact {}", artifactInput, e);
                 return;
             }
-            descriptor = ArtifactInputDescriptor.parseLocal(remoteDownloadResult.localPath());
+            parsePath = remoteDownloadResult.localPath();
+            descriptor = ArtifactInputDescriptor.parseRemote(
+                    artifactInput,
+                    remoteDownloadResult.fileName(),
+                    remoteDownloadResult.contentType());
         } else {
-            descriptor = ArtifactInputDescriptor.parseLocal(Path.of(artifactInput));
+            parsePath = Path.of(artifactInput);
+            descriptor = ArtifactInputDescriptor.parseLocal(parsePath);
         }
 
         ArtifactsByParser artifacts = parentCommand.loadArtifacts();
@@ -100,7 +108,10 @@ public class ParseCommand implements Runnable {
             }
 
             try {
-                ArtifactMetadata artifact = parser.parse(descriptor, context);
+                ArtifactMetadata artifact;
+                try (InputStream input = Files.newInputStream(parsePath)) {
+                    artifact = parser.parse(descriptor, input, context);
+                }
                 if (artifact == null) {
                     continue;
                 }
