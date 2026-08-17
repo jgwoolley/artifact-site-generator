@@ -8,12 +8,12 @@
 
   <table>
     <tbody>
-      <tr><th>Group</th><td>${groupId?html}</td></tr>
-      <tr><th>Artifact</th><td>${artifactId?html}</td></tr>
+      <tr><th>Group Id</th><td>${groupId?html}</td></tr>
+      <tr><th>Artifact Id</th><td>${artifactId?html}</td></tr>
       <tr><th>Version</th><td>${version?html}</td></tr>
       <tr><th>License</th><td>${license?html}</td></tr>
       <tr><th>Source Type</th><td>${sourceType?html}</td></tr>
-      <tr><th>Source</th><td><#if sourceValue?has_content && (sourceValue?starts_with("http://") || sourceValue?starts_with("https://"))><a href="${sourceValue?html}">${sourceValue?html}</a><#else>${sourceValue?html}</#if></td></tr>
+      <tr><th>Source</th><td><a href="${downloadUrl?html}">${sourceValue?html}</a></td></tr>
       <tr><th>SCM</th><td><#if scmUrl?has_content><#if scmUrl?starts_with("http://") || scmUrl?starts_with("https://")><a href="${scmUrl?html}">${scmUrl?html}</a><#else>${scmUrl?html}</#if><#else></#if></td></tr>
       <tr><th>File Name</th><td>${fileName?html}</td></tr>
       <tr><th>SHA-256</th><td>${sha256?html}</td></tr>

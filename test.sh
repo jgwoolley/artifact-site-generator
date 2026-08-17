@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-# mvn package
+mvn package
 
 java -jar ./artifact-site-cli/target/artifact-site-cli-*.jar clear-plugins
 

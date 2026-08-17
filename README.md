@@ -249,18 +249,20 @@ Implementation detail:
 - [x] **Static Generator**
   - FreeMarker templates + output assets.
 - [x] **OpenVSIX-style UI**
-  - Listing/detail pages + client-side search/filter.
+  - Listing/detail pages
+- [ ] client-side search/filter.
 - [ ] **More Plugins**
   - [x] VSIX
   - VintageStory Mod
   - Chrome Browser Extension
-    - [x] Java JAR / Maven
-    - NiFi NAR
+  - [x] Java JAR / Maven
+  - NiFi NAR
 - [ ] Fix search
 - [ ] **Hardening**
   - Input validation, tests, docs, packaging, release steps.
 
-
 ## TODO
 
 - Add java modules to src code?
+- File Size should be human readable
+- Search doesn't work.

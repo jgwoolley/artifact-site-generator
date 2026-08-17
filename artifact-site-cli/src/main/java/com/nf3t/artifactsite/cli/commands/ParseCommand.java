@@ -40,8 +40,8 @@ public class ParseCommand implements Runnable {
     @ParentCommand
     private ArtifactSiteGeneratorCli parentCommand;
 
-    @Parameters(index = "0", description = "Artifact file path or URL")
-    private String artifactInput;
+    @Parameters(index = "0..*", description = "Artifact file path(s) or URL(s)")
+    private List<String> artifactInputs;
 
     @Option(names = "--http-header", description = "Remote HTTP header in NAME=VALUE format")
     private List<String> httpHeaders;
@@ -71,68 +71,73 @@ public class ParseCommand implements Runnable {
         pluginManager.startPlugins();
         List<ArtifactParserPlugin> plugins = parentCommand.loadParserPlugins(pluginManager);
         LOGGER.info("Loaded {} parser plugin(s).", plugins.size());
-        LOGGER.debug("Input Artifact: {}", artifactInput);
-        ArtifactParseContext context = new ArtifactParseContext();
+        
+        ArtifactsByParser artifacts = parentCommand.loadArtifacts();
         RemoteRequestConfigStore remoteRequestConfigStore = parentCommand.loadRemoteRequestConfigStore();
 
-        boolean remoteInput = isRemoteInput(artifactInput);
-        ArtifactInputDescriptor descriptor;
-        Path parsePath;
-        RemoteDownloadResult remoteDownloadResult = null;
-        if (remoteInput) {
-            Map<String, String> headers = parseHeaders(httpHeaders);
-            RemoteTlsConfig tlsConfig = buildTlsConfig();
-            RemoteArtifactDownloader downloader = new RemoteArtifactDownloader();
-            try {
-                remoteDownloadResult = downloader.download(artifactInput, headers, tlsConfig, parentCommand.remoteCacheDir());
-            } catch (Exception e) {
-                LOGGER.error("Unable to download remote artifact {}", artifactInput, e);
-                return;
-            }
-            parsePath = remoteDownloadResult.localPath();
-            descriptor = ArtifactInputDescriptor.parseRemote(
-                    artifactInput,
-                    remoteDownloadResult.fileName(),
-                    remoteDownloadResult.contentType());
-        } else {
-            parsePath = Path.of(artifactInput);
-            descriptor = ArtifactInputDescriptor.parseLocal(parsePath);
-        }
+        for(String artifactInput: artifactInputs) {
+            LOGGER.debug("Input Artifact: {}", artifactInput);
+            ArtifactParseContext context = new ArtifactParseContext();
 
-        ArtifactsByParser artifacts = parentCommand.loadArtifacts();
-
-        for (ArtifactParserPlugin plugin : plugins) {
-            final var parser = plugin.parser();
-            if (!parser.supports(descriptor)) {
-                continue;
-            }
-
-            try {
-                ArtifactMetadata artifact;
-                try (InputStream input = Files.newInputStream(parsePath)) {
-                    artifact = parser.parse(descriptor, input, context);
+            boolean remoteInput = isRemoteInput(artifactInput);
+            ArtifactInputDescriptor descriptor;
+            Path parsePath;
+            RemoteDownloadResult remoteDownloadResult = null;
+            if (remoteInput) {
+                Map<String, String> headers = parseHeaders(httpHeaders);
+                RemoteTlsConfig tlsConfig = buildTlsConfig();
+                RemoteArtifactDownloader downloader = new RemoteArtifactDownloader();
+                try {
+                    remoteDownloadResult = downloader.download(artifactInput, headers, tlsConfig, parentCommand.remoteCacheDir());
+                } catch (Exception e) {
+                    LOGGER.error("Unable to download remote artifact {}", artifactInput, e);
+                    return;
                 }
-                if (artifact == null) {
+                parsePath = remoteDownloadResult.localPath();
+                descriptor = ArtifactInputDescriptor.parseRemote(
+                        artifactInput,
+                        remoteDownloadResult.fileName(),
+                        remoteDownloadResult.contentType());
+            } else {
+                parsePath = Path.of(artifactInput);
+                descriptor = ArtifactInputDescriptor.parseLocal(parsePath);
+            }
+
+            for (ArtifactParserPlugin plugin : plugins) {
+                final var parser = plugin.parser();
+                if (!parser.supports(descriptor)) {
                     continue;
                 }
-                if (remoteInput) {
-                    artifact.setSourceType(ArtifactSourceType.REMOTE.name().toLowerCase());
-                    artifact.setSourceValue(artifactInput);
-                    artifact.setDownloadUrl(artifactInput);
-                    if (remoteDownloadResult != null && remoteDownloadResult.fileName() != null) {
-                        artifact.setFileName(remoteDownloadResult.fileName());
+
+                try {
+                    ArtifactMetadata artifact;
+                    try (InputStream input = Files.newInputStream(parsePath)) {
+                        artifact = parser.parse(descriptor, input, context);
                     }
-                } else {
-                    artifact.setSourceType(ArtifactSourceType.LOCAL.name().toLowerCase());
-                    artifact.setSourceValue(Path.of(artifactInput).toString());
+                    if (artifact == null) {
+                        continue;
+                    }
+                    if (remoteInput) {
+                        artifact.setSourceType(ArtifactSourceType.REMOTE.name().toLowerCase());
+                        artifact.setSourceValue(artifactInput);
+                        artifact.setDownloadUrl(artifactInput);
+                        if (remoteDownloadResult != null && remoteDownloadResult.fileName() != null) {
+                            artifact.setFileName(remoteDownloadResult.fileName());
+                        }
+                    } else {
+                        artifact.setSourceType(ArtifactSourceType.LOCAL.name().toLowerCase());
+                        artifact.setSourceValue(Path.of(artifactInput).toString());
+                    }
+                    LOGGER.debug("Parsed: {}", artifact);
+                    artifacts.put(artifact);
+                    updateRemoteRequestConfig(remoteRequestConfigStore, artifact, remoteInput, remoteDownloadResult, artifactInput);
+                } catch (Exception e) {
+                    LOGGER.warn("Could not parse " + artifactInput + " with " + parser.getClass(), e);
                 }
-                LOGGER.debug("Parsed: {}", artifact);
-                artifacts.put(artifact);
-                updateRemoteRequestConfig(remoteRequestConfigStore, artifact, remoteInput, remoteDownloadResult);
-            } catch (Exception e) {
-                LOGGER.warn("Could not parse " + artifactInput + " with " + parser.getClass(), e);
-            }
+            }        	
         }
+        
+
 
         parentCommand.saveArtifacts(artifacts);
         parentCommand.saveRemoteRequestConfigStore(remoteRequestConfigStore);
@@ -142,7 +147,7 @@ public class ParseCommand implements Runnable {
             RemoteRequestConfigStore store,
             ArtifactMetadata artifact,
             boolean remoteInput,
-            RemoteDownloadResult remoteDownloadResult) {
+            RemoteDownloadResult remoteDownloadResult, String artifactInput) {
         String artifactId = artifact.getId();
         if (artifactId == null || artifactId.isBlank()) {
             return;
