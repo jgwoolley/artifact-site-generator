@@ -17,7 +17,7 @@
       <tr><th>SCM</th><td><#if scmUrl?has_content><#if scmUrl?starts_with("http://") || scmUrl?starts_with("https://")><a href="${scmUrl?html}">${scmUrl?html}</a><#else>${scmUrl?html}</#if><#else></#if></td></tr>
       <tr><th>File Name</th><td>${fileName?html}</td></tr>
       <tr><th>SHA-256</th><td>${sha256?html}</td></tr>
-      <tr><th>File Size</th><td>${fileSizeBytes?c}</td></tr>
+      <tr><th>File Size</th><td><#if fileSizeHumanReadable?has_content>${fileSizeHumanReadable?html}<#if fileSizeBytes??> (${fileSizeBytes?c} bytes)</#if><#elseif fileSizeBytes??>${fileSizeBytes?c} bytes</#if></td></tr>
       <tr><th>Authors</th><td><#list authors as author>${author?html}<#if author_has_next>, </#if></#list></td></tr>
       <tr><th>Tags</th><td><#list tags as tag>${tag?html}<#if tag_has_next>, </#if></#list></td></tr>
     </tbody>

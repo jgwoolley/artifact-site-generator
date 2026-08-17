@@ -1,5 +1,5 @@
 :root {
-  color-scheme: light;
+  color-scheme: light dark;
   font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
   --bg: #f8fafc;
   --card: #ffffff;
@@ -7,6 +7,27 @@
   --muted: #4b5563;
   --line: #e5e7eb;
   --accent: #2563eb;
+  --tag-bg: #eef2ff;
+  --tag-line: #dbeafe;
+  --tag-text: #1e3a8a;
+  --banner-text-color-light: #111827;
+  --banner-background-color-light: #fef3c7;
+  --banner-text-color-dark: #111827;
+  --banner-background-color-dark: #fef3c7;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0b1220;
+    --card: #111827;
+    --text: #f9fafb;
+    --muted: #9ca3af;
+    --line: #374151;
+    --accent: #60a5fa;
+    --tag-bg: #1e293b;
+    --tag-line: #334155;
+    --tag-text: #bfdbfe;
+  }
 }
 
 * { box-sizing: border-box; }
@@ -16,6 +37,21 @@ body {
   color: var(--text);
 }
 
+.site-banner {
+  text-align: center;
+  font-weight: 600;
+  padding: 0.7rem 1rem;
+  color: var(--banner-text-color-light);
+  background: var(--banner-background-color-light);
+}
+
+@media (prefers-color-scheme: dark) {
+  .site-banner {
+    color: var(--banner-text-color-dark);
+    background: var(--banner-background-color-dark);
+  }
+}
+
 .top-nav {
   display: flex;
   gap: 1rem;
@@ -23,7 +59,7 @@ body {
   justify-content: space-between;
   padding: 0.85rem 1rem;
   border-bottom: 1px solid var(--line);
-  background: #fff;
+  background: var(--card);
   position: sticky;
   top: 0;
 }
@@ -92,9 +128,9 @@ body {
 }
 
 .tag {
-  background: #eef2ff;
-  border: 1px solid #dbeafe;
-  color: #1e3a8a;
+  background: var(--tag-bg);
+  border: 1px solid var(--tag-line);
+  color: var(--tag-text);
   border-radius: 999px;
   font-size: 0.8rem;
   padding: 0.1rem 0.5rem;
@@ -113,7 +149,7 @@ body {
 table {
   width: 100%;
   border-collapse: collapse;
-  background: #fff;
+  background: var(--card);
   border: 1px solid var(--line);
 }
 

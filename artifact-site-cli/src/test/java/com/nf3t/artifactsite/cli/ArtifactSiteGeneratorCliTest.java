@@ -189,11 +189,27 @@ class ArtifactSiteGeneratorCliTest {
         v2.setSourceType("local");
         v2.setSourceValue(localArtifact.toString());
         v2.setFileName("demo-2.0.0.vsix");
+        v2.setFileSizeBytes(2048L);
 
         OBJECT_MAPPER.writeValue(artifactJson.toFile(), List.of(v1, v2));
 
         int exitCode = new CommandLine(new ArtifactSiteGeneratorCli())
-                .execute("--artifact-json", artifactJson.toString(), "generate", "--output", outputDir.toString());
+                .execute(
+                        "--artifact-json",
+                        artifactJson.toString(),
+                        "generate",
+                        "--output",
+                        outputDir.toString(),
+                        "--bannerText",
+                        "This application is in beta",
+                        "--bannerTextColorDark",
+                        "black",
+                        "--bannerBackgroundColorDark",
+                        "white",
+                        "--bannerTextColorLight",
+                        "black",
+                        "--bannerBackgroundColorLight",
+                        "white");
 
         assertThat(exitCode).isZero();
         assertThat(Files.exists(outputDir.resolve("index.html"))).isTrue();
@@ -212,6 +228,11 @@ class ArtifactSiteGeneratorCliTest {
         String detailPage = Files.readString(outputDir.resolve("artifacts/vsix/acme.demo/2.0.0/index.html"));
         assertThat(detailPage).contains("Download");
         assertThat(detailPage).contains("/downloads/demo/2.0.0/demo-2.0.0.vsix");
+        assertThat(detailPage).contains("2.0 KB (2048 bytes)");
+
+        String rootIndex = Files.readString(outputDir.resolve("index.html"));
+        assertThat(rootIndex).contains("This application is in beta");
+        assertThat(rootIndex).contains("--banner-text-color-dark:black");
 
         List<Map<String, Object>> searchIndex = OBJECT_MAPPER.readValue(
                 outputDir.resolve("search-index.json").toFile(),
