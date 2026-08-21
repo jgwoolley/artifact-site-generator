@@ -137,8 +137,6 @@ public class ParseCommand implements Runnable {
             }        	
         }
         
-
-
         parentCommand.saveArtifacts(artifacts);
         parentCommand.saveRemoteRequestConfigStore(remoteRequestConfigStore);
     }

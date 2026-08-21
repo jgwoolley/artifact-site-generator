@@ -275,6 +275,7 @@ Implementation detail:
 ## TODO
 
 - Add java modules to src code?
-- File Size should be human readable
 - Search doesn't work.
 - More sensible commands like "artifact add" "plugin add" "artifact clear" "plugin clear"s
+- Add url to background href / a element.
+- Override FTL files plugin behavior?
