@@ -1,30 +1,38 @@
 package com.nf3t.artifactsite.cli;
 
-import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Iterator;
 import java.util.Map;
 
 import com.nf3t.artifactsite.api.ArtifactMetadata;
 
+/**
+ * Groups artifact versions by artifact slug.
+ */
 public class ArtifactsById implements Iterable<ArtifactsByVersion> {
-	private Map<String,ArtifactsByVersion> artifactsByVersion;
+	private Map<String,ArtifactsByVersion> artifactsBySlug;
 
 	public ArtifactsById() {
-		this.artifactsByVersion = new HashMap<>();
+		this.artifactsBySlug = new LinkedHashMap<>();
 	}
 
+	/**
+	 * Adds an artifact, replacing only an existing record with the same identity.
+	 *
+	 * @param artifact artifact metadata to store
+	 */
 	public void put(ArtifactMetadata artifact) {
-		String pluginId = artifact.getPluginId();
-		ArtifactsByVersion value = artifactsByVersion.get(pluginId);
+		String slug = artifact.getArtifactSlug();
+		ArtifactsByVersion value = artifactsBySlug.get(slug);
 		if(value == null) {
 			value = new ArtifactsByVersion();
-			artifactsByVersion.put(pluginId, value);
+			artifactsBySlug.put(slug, value);
 		}
 		value.put(artifact);
 	}
 
 	@Override
 	public Iterator<ArtifactsByVersion> iterator() {
-		return artifactsByVersion.values().iterator();
+		return artifactsBySlug.values().iterator();
 	}
 }

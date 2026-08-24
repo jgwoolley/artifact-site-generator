@@ -146,6 +146,35 @@ class ArtifactSiteGeneratorCliTest {
         assertThat(cli.pluginLoadDirs()).isEqualTo(List.of(XdgPaths.pluginDir(), customPluginDir));
     }
 
+    /**
+     * Verifies that a later read replaces an equal catalog record.
+     */
+    @Test
+    void laterEqualArtifactReplacesEarlierRecord() {
+        ArtifactsByParser artifacts = new ArtifactsByParser();
+        com.nf3t.artifactsite.api.ArtifactMetadata first = new com.nf3t.artifactsite.api.ArtifactMetadata();
+        first.setPluginId("vsix");
+        first.setGroupId("acme");
+        first.setArtifactId("demo");
+        first.setVersion("1.0.0");
+        first.setId("acme:demo:1.0.0");
+        first.setDescription("old");
+
+        com.nf3t.artifactsite.api.ArtifactMetadata latest = new com.nf3t.artifactsite.api.ArtifactMetadata();
+        latest.setPluginId("vsix");
+        latest.setGroupId("acme");
+        latest.setArtifactId("demo");
+        latest.setVersion("1.0.0");
+        latest.setId("acme:demo:1.0.0");
+        latest.setDescription("new");
+
+        artifacts.put(first);
+        artifacts.put(latest);
+
+        assertThat(artifacts.save()).singleElement().extracting(
+                com.nf3t.artifactsite.api.ArtifactMetadata::getDescription).isEqualTo("new");
+    }
+
     @Test
     void artifactInputDescriptorParseRemoteResolvesSourceAndExtension() {
         var descriptor = com.nf3t.artifactsite.api.ArtifactInputDescriptor.parseRemote(
@@ -226,11 +255,15 @@ class ArtifactSiteGeneratorCliTest {
         assertThat(Files.readString(copiedDownload)).isEqualTo("artifact-bytes");
 
         String detailPage = Files.readString(outputDir.resolve("artifacts/vsix/acme.demo/2.0.0/index.html"));
+        assertThat(detailPage).contains("<title>Acme Demo 2.0.0</title>");
+        assertThat(detailPage).contains("second release");
         assertThat(detailPage).contains("Download");
         assertThat(detailPage).contains("/downloads/demo/2.0.0/demo-2.0.0.vsix");
         assertThat(detailPage).contains("2.0 KB (2048 bytes)");
 
         String rootIndex = Files.readString(outputDir.resolve("index.html"));
+        assertThat(rootIndex).contains("Acme Demo");
+        assertThat(rootIndex).contains("second release");
         assertThat(rootIndex).contains("This application is in beta");
         assertThat(rootIndex).contains("--banner-text-color-dark:black");
 

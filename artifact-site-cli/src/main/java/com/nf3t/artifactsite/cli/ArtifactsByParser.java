@@ -1,18 +1,21 @@
 package com.nf3t.artifactsite.cli;
 
 import java.util.ArrayList;
-import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 
 import com.nf3t.artifactsite.api.ArtifactMetadata;
 
+/**
+ * Groups parsed artifacts by parser plugin.
+ */
 public class ArtifactsByParser implements Iterable<ArtifactsById>{
 	private Map<String,ArtifactsById> artifactsByVersion;
 
 	public ArtifactsByParser() {
-		this.artifactsByVersion = new HashMap<>();
+		this.artifactsByVersion = new LinkedHashMap<>();
 	}
 
 	public void put(ArtifactMetadata artifact) {

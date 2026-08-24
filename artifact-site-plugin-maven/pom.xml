@@ -9,6 +9,17 @@
   </parent>
 
   <artifactId>artifact-site-plugin-maven</artifactId>
+  <name>Artifact Site Maven Plugin</name>
+  <description>Generates documentation for maven artifacts.</description>
+  <developers>
+    <developer><name>jgwoolley</name></developer>
+  </developers>
+  <scm>
+    <url>https://github.com/jgwoolley/artifact-site-generator</url>
+    <connection>scm:git:git://github.com/jgwoolley/artifact-site-generator.git</connection>
+    <developerConnection>scm:git:ssh://github.com/jgwoolley/artifact-site-generator.git</developerConnection>
+    <tag>HEAD</tag>
+  </scm>
 
   <dependencies>
     <dependency>

@@ -21,7 +21,8 @@ RUN curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v${NVM_VERSION}/inst
     && nvm alias default ${NODE_VERSION} \
     && nvm use default \
     # Install Copilot CLI (installed into the nvm-managed node prefix)
-    && . "$NVM_DIR/nvm.sh" && npm install -g @github/copilot
+    && . "$NVM_DIR/nvm.sh" && npm install -g @github/copilot \
+    && npm install -g @anthropic-ai/claude-code
 
 # Ensure nvm is loaded for interactive root shells
 RUN echo '. "${NVM_DIR}/nvm.sh"' >> /root/.bashrc

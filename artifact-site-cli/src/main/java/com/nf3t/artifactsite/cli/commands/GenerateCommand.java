@@ -115,9 +115,16 @@ public class GenerateCommand implements Runnable {
                         .resolve(artifactGroup.artifactSegment())
                         .resolve("index.html");
                 Map<String, Object> artifactData = new HashMap<>();
-                artifactData.put("title", artifactGroup.artifactKey() + " Versions");
-                artifactData.put("pageHeading", artifactGroup.artifactKey() + " Versions");
-                artifactData.put("pageDescription", "All published versions for " + artifactGroup.artifactKey());
+                Map<String, Object> latestDetailPage = artifactGroup.detailPages().get(0);
+                String artifactName = (String) latestDetailPage.get("pageHeading");
+                String latestDescription = (String) latestDetailPage.get("description");
+                artifactData.put("title", artifactName + " Versions");
+                artifactData.put("pageHeading", artifactName + " Versions");
+                artifactData.put(
+                        "pageDescription",
+                        isBlank(latestDescription)
+                                ? "All published versions for " + artifactName
+                                : latestDescription);
                 artifactData.put("rootPath", relativeRootPath(artifactIndexPath, outputRoot));
                 artifactData.put("versions", artifactGroup.versionRows());
                 writeTemplate(freemarker, "index.ftl", artifactIndexPath, artifactData);
@@ -214,7 +221,7 @@ public class GenerateCommand implements Runnable {
                     versionRows.add(versionRow);
 
                     Map<String, Object> detailPage = new HashMap<>();
-                    detailPage.put("title", artifactKey + " " + versionValue);
+                    detailPage.put("title", displayName(version) + " " + versionValue);
                     detailPage.put("pageHeading", displayName(version));
                     detailPage.put("artifactKey", artifactKey);
                     detailPage.put("version", versionValue);

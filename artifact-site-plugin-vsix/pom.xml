@@ -9,6 +9,17 @@
   </parent>
 
   <artifactId>artifact-site-plugin-vsix</artifactId>
+  <name>Artifact Site VSIX Plugin</name>
+  <description>Generates documentation for VSCode VSIX extensions.</description>
+  <developers>
+    <developer><name>jgwoolley</name></developer>
+  </developers>
+  <scm>
+    <url>https://github.com/jgwoolley/artifact-site-generator</url>
+    <connection>scm:git:git://github.com/jgwoolley/artifact-site-generator.git</connection>
+    <developerConnection>scm:git:ssh://github.com/jgwoolley/artifact-site-generator.git</developerConnection>
+    <tag>HEAD</tag>
+  </scm>
 
   <dependencies>
     <dependency>
@@ -23,6 +34,11 @@
       <groupId>org.pf4j</groupId>
       <artifactId>pf4j</artifactId>
       <version>${pf4j.version}</version>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>tools.jackson.core</groupId>
+      <artifactId>jackson-databind</artifactId>
       <scope>provided</scope>
     </dependency>
 

@@ -5,6 +5,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -37,6 +38,7 @@ public class MavenArtifactParser implements ArtifactParser {
         if (descriptor == null || descriptor.fileName() == null) {
             return false;
         }
+
         return descriptor.fileName().toLowerCase().endsWith(".jar")
                 || Objects.equals("jar", descriptor.extension());
     }
@@ -55,10 +57,12 @@ public class MavenArtifactParser implements ArtifactParser {
         metadata.setVersion(selected.version());
         metadata.setArtifactName(selected.artifactId());
         metadata.setId(selected.groupId() + ":" + selected.artifactId() + ":" + selected.version());
-        metadata.setFileName(descriptor.fileName());
+        PomModel pom = readPom(content, selected.path());
+        metadata.setDescription(firstNonBlank(pom.description(), selected.description()));
+        metadata.setAuthors(pom.authors());
+        metadata.setArtifactName(firstNonBlank(pom.name(), selected.artifactName(), selected.artifactId()));
+        metadata.updateFileMetadata(descriptor);
         metadata.setFileSizeBytes(content.length);
-        metadata.setSourceType(descriptor.sourceType().name().toLowerCase());
-        metadata.setSourceValue(descriptor.sourceValue());
         metadata.setSha256(context.sha256(content));
         metadata.setPluginId("maven");
         metadata.setScmUrl(readScmUrl(content, selected.path()).orElse(null));
@@ -92,30 +96,31 @@ public class MavenArtifactParser implements ArtifactParser {
                 String groupId = trimToNull(properties.getProperty("groupId"));
                 String artifactId = trimToNull(properties.getProperty("artifactId"));
                 String version = trimToNull(properties.getProperty("version"));
+                String description = trimToNull(properties.getProperty("description"));
+                String name = trimToNull(properties.getProperty("name"));
                 if (groupId == null || artifactId == null || version == null) {
                     continue;
                 }
-                candidates.add(new PomCandidate(path, groupId, artifactId, version));
+                candidates.add(new PomCandidate(path, groupId, artifactId, version, description, name));
             }
         }
         return candidates;
     }
 
     private Optional<String> readScmUrl(byte[] content, String pomPropertiesPath) {
-        String pomPath = pomPropertiesPath.substring(0, pomPropertiesPath.length() - "pom.properties".length()) + "pom.xml";
+        String pomPath = pomXmlPath(pomPropertiesPath);
         try (ZipInputStream zipInput = new ZipInputStream(new ByteArrayInputStream(content))) {
             ZipEntry entry;
             while ((entry = zipInput.getNextEntry()) != null) {
                 if (!pomPath.equals(entry.getName())) {
                     continue;
                 }
-                DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
-                factory.setNamespaceAware(false);
-                var document = factory.newDocumentBuilder().parse(zipInput);
+                var document = newDocumentBuilderFactory().newDocumentBuilder().parse(zipInput);
                 NodeList scmNodes = document.getElementsByTagName("scm");
                 if (scmNodes.getLength() == 0) {
                     return Optional.empty();
                 }
+
                 Element scm = (Element) scmNodes.item(0);
                 String url = readElementText(scm, "url");
                 if (!isBlank(url)) {
@@ -131,6 +136,80 @@ public class MavenArtifactParser implements ArtifactParser {
             return Optional.empty();
         }
         return Optional.empty();
+    }
+
+    /** Reads the embedded POM's human-readable metadata. */
+    private PomModel readPom(byte[] content, String pomPropertiesPath) {
+        String pomPath = pomXmlPath(pomPropertiesPath);
+        try (ZipInputStream zipInput = new ZipInputStream(new ByteArrayInputStream(content))) {
+            ZipEntry entry;
+            while ((entry = zipInput.getNextEntry()) != null) {
+                if (pomPath.equals(entry.getName())) {
+                    var document = newDocumentBuilderFactory().newDocumentBuilder().parse(zipInput);
+                    Element project = document.getDocumentElement();
+                    return new PomModel(
+                            readDirectChildText(project, "name"),
+                            readDirectChildText(project, "description"),
+                            readDevelopers(project));
+                }
+            }
+        } catch (Exception ignored) {
+            // Properties values remain valid fallbacks for malformed or absent POM XML.
+        }
+        return new PomModel(null, null, List.of());
+    }
+
+    /** Creates the secure XML parser used for embedded POM files. */
+    private static DocumentBuilderFactory newDocumentBuilderFactory() throws Exception {
+        DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+        factory.setNamespaceAware(false);
+        factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
+        factory.setFeature("http://xml.org/sax/features/external-general-entities", false);
+        factory.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
+        factory.setExpandEntityReferences(false);
+        return factory;
+    }
+
+    /** Resolves the POM XML entry paired with a properties entry. */
+    private static String pomXmlPath(String pomPropertiesPath) {
+        return pomPropertiesPath.substring(0, pomPropertiesPath.length() - "pom.properties".length()) + "pom.xml";
+    }
+
+    /** Reads text from a direct child element. */
+    private static @Nullable String readDirectChildText(Element parent, String tagName) {
+        NodeList children = parent.getChildNodes();
+        for (int i = 0; i < children.getLength(); i++) {
+            if (children.item(i) instanceof Element child && tagName.equals(child.getTagName())) {
+                return trimToNull(child.getTextContent());
+            }
+        }
+        return null;
+    }
+
+    /** Reads developer names from the embedded Maven POM. */
+    private static List<String> readDevelopers(Element project) {
+        LinkedHashSet<String> authors = new LinkedHashSet<>();
+        NodeList developers = project.getElementsByTagName("developer");
+        for (int i = 0; i < developers.getLength(); i++) {
+            if (developers.item(i) instanceof Element developer) {
+                String name = readDirectChildText(developer, "name");
+                if (name != null) {
+                    authors.add(name);
+                }
+            }
+        }
+        return new ArrayList<>(authors);
+    }
+
+    /** Returns the first non-blank candidate. */
+    private static @Nullable String firstNonBlank(@Nullable String... values) {
+        for (String value : values) {
+            String trimmed = trimToNull(value);
+            if (trimmed != null) {
+                return trimmed;
+            }
+        }
+        return null;
     }
 
     private static int scoreCandidate(String jarBaseName, String artifactId, String version) {
@@ -190,6 +269,16 @@ public class MavenArtifactParser implements ArtifactParser {
         return value == null || value.isBlank();
     }
 
-    private record PomCandidate(String path, String groupId, String artifactId, String version) {
+    private record PomModel(@Nullable String name, @Nullable String description, List<String> authors) {
+    }
+
+    private record PomCandidate(
+            String path,
+            String groupId,
+            String artifactId,
+            String version,
+            @Nullable String description,
+            @Nullable String artifactName) {
+
     }
 }

@@ -82,6 +82,7 @@ public class ParseCommand implements Runnable {
             boolean remoteInput = isRemoteInput(artifactInput);
             ArtifactInputDescriptor descriptor;
             Path parsePath;
+            // TODO: RemoteDownloadResult could potentially share class with artifact descriptor
             RemoteDownloadResult remoteDownloadResult = null;
             if (remoteInput) {
                 Map<String, String> headers = parseHeaders(httpHeaders);
@@ -110,6 +111,7 @@ public class ParseCommand implements Runnable {
                 }
 
                 try {
+                	// TODO: Should have multiple phases that gather metadata
                     ArtifactMetadata artifact;
                     try (InputStream input = Files.newInputStream(parsePath)) {
                         artifact = parser.parse(descriptor, input, context);

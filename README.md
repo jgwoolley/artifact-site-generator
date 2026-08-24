@@ -20,19 +20,17 @@ A Java CLI that parses release artifacts and generates a fully static artifact r
 - **Apache HttpClient 5** for remote artifact download/streaming
 - **Jackson** (`jackson-databind`, `jackson-dataformat-yaml`) for metadata and config serialization
 - **Apache FreeMarker** for static HTML templating
-- **SLF4J + Logback** for logging
-- **Apache Tika**: For mime-type and file type detection
+- **SLF4J + slf4j-simple** for logging
 
 ### Testing
 
 - **JUnit 5**
 - **AssertJ**
-- **Mockito**
 - **Maven Surefire + Failsafe** for unit/integration test separation
 
 ## Repository / Module Plan
 
-Create a Maven multi-module project:
+The Maven multi-module project contains:
 
 - `artifact-site-parent` (root pom)
 - `artifact-site-plugins-api`
@@ -48,18 +46,20 @@ Create a Maven multi-module project:
 
 Build the CLI as an uberjar using `maven-shade-plugin`.
 
+Plugin modules may use libraries already supplied by the CLI as `provided` dependencies. This keeps plugin JARs lightweight and ensures the CLI owns the shared runtime version.
+
 ## XDG Paths (Concrete Locations)
 
-Default paths must follow XDG with explicit fallbacks:
+The CLI currently uses `XDG_DATA_HOME` with an explicit fallback:
 
-- **Config file**
-  - `${XDG_CONFIG_HOME:-~/.config}/artifact-site-generator/config.yaml`
 - **Plugin directory**
   - `${XDG_DATA_HOME:-~/.local/share}/artifact-site-generator/plugins`
-- **Metadata catalog directory**
-  - `${XDG_STATE_HOME:-~/.local/state}/artifact-site-generator/catalog`
-- **Working cache directory**
-  - `${XDG_CACHE_HOME:-~/.cache}/artifact-site-generator`
+- **Artifact catalog**
+  - `${XDG_DATA_HOME:-~/.local/share}/artifact-site-generator/artifacts.json`
+- **Remote download cache**
+  - `${XDG_DATA_HOME:-~/.local/share}/artifact-site-generator/remote-cache`
+- **Remote request configuration**
+  - `${XDG_DATA_HOME:-~/.local/share}/artifact-site-generator/remote-requests.json`
 - **Generated static site output**
   - `./public` by default (override with `--output`)
 
@@ -84,18 +84,13 @@ Each parsed artifact record should include:
 - `fileSizeBytes`
 - `sha256`
 - `pluginId` (which parser produced this record)
-- `remoteHeaders` (optional list, present for remote sources)
-- `remoteTls` (optional object, present for remote sources)
-  - `insecureSkipVerify` (boolean)
-  - `trustStorePath` (nullable string path)
-  - `clientCertificatePath` (nullable string path)
-  - `clientPrivateKeyPath` (nullable string path)
+- Remote request headers and TLS settings are stored separately in
+  `remote-requests.json`, keyed by artifact ID.
 
 Catalog storage format:
 
-- `catalog/artifacts.json` (canonical list used by generator)
-- Optional split files for scale:
-  - `catalog/artifacts/<artifact-id>/<version>.json`
+- `${XDG_DATA_HOME:-~/.local/share}/artifact-site-generator/artifacts.json`
+- `${XDG_DATA_HOME:-~/.local/share}/artifact-site-generator/remote-requests.json`
 
 ## Plugin API Plan
 
@@ -145,26 +140,20 @@ Behavior:
 
 - Detect parser plugin via `supports`.
 - Loads parser plugins from the default XDG plugin directory and, when provided, `--plugin-dir`.
-- Parse metadata and append/update catalog.
+- Parse metadata and append/update the catalog. Equal records are identified by
+  their stable artifact ID; when the same record is read again, the later
+  metadata replaces the earlier record while other versions are retained.
 - Resolve `downloadUrl`:
   - If input is **remote URL**, `downloadUrl` must be that exact URL.
-  - If input is **local file**, copy artifact to:
-    - `./public/downloads/<artifactId>/<version>/<fileName>`
-    - and set `downloadUrl` to relative path:
-      - `/downloads/<artifactId>/<version>/<fileName>`
+  - If input is **local file**, the generator copies it to
+    `./public/downloads/<artifactId>/<version>/<fileName>` and uses the
+    corresponding relative path.
 
-REMOTE implementation notes (next milestone):
-
-- Parse command should accept either a filesystem path or URL as the first argument.
-- For remote input (`ArtifactSourceType.REMOTE`), download using Apache HttpClient 5 before parser invocation.
-- Add repeatable header flags like `--http-header "Name=Value"` and attach them to the request.
-- Add TLS flags:
-  - `--remote-tls-trust-store /path/to/truststore-or-ca`
-  - `--remote-tls-trust-store-password secret`
-  - `--remote-tls-client-cert /path/to/client-cert`
-  - `--remote-tls-client-key /path/to/client-key`
-  - `--remote-tls-client-key-password secret`
-- Persist the effective remote request metadata (`remoteHeaders` and `remoteTls`) with each parsed artifact record.
+- Remote inputs are downloaded with Apache HttpClient 5 before parser invocation.
+- Repeatable `--http-header "Name=Value"` options are supported.
+- Trust-store and client-certificate TLS options are supported.
+- Effective remote request metadata is persisted separately in
+  `remote-requests.json`.
 
 ### `generate`
 
@@ -209,6 +198,14 @@ Generated output in `./public`:
 - `search-index.json`
 - `downloads/...` (for local artifact inputs only)
 
+Artifact parser metadata sources:
+
+- Maven reads `name`, `description`, `developers`, and `scm` from the
+  embedded `META-INF/maven/<group>/<artifact>/pom.xml`.
+- VSIX reads `displayName`, `description`, `author`, `contributors`, and
+  `repository` from the packaged `package.json`, with manifest fallbacks for
+  display name, description, and source URL.
+
 ## UI/UX Direction (OpenVSIX-Inspired)
 
 Match the OpenVSIX registry feel with:
@@ -230,9 +227,10 @@ Implementation detail:
 
 1. User installs parser plugins with `add-plugin`.
 2. User runs `parse` for any number of local files or remote URLs.
-3. CLI updates catalog metadata and copies local artifacts into `./public/downloads/...`.
+3. CLI updates catalog metadata.
 4. User runs `generate`.
-5. Static site appears in `./public` and can be hosted as-is.
+5. The generator copies local artifacts into `./public/downloads/...` and the
+   static site appears in `./public` and can be hosted as-is.
 
 ## Non-Goals
 
@@ -261,21 +259,24 @@ Implementation detail:
   - FreeMarker templates + output assets.
 - [x] **OpenVSIX-style UI**
   - Listing/detail pages
-- [ ] client-side search/filter.
+- [x] **Client-side search/filter**
 - [ ] **More Plugins**
   - [x] VSIX
   - VintageStory Mod
   - Chrome Browser Extension
   - [x] Java JAR / Maven
   - NiFi NAR
-- [ ] Fix search
 - [ ] **Hardening**
   - Input validation, tests, docs, packaging, release steps.
 
 ## TODO
 
 - Add java modules to src code?
-- Search doesn't work.
 - More sensible commands like "artifact add" "plugin add" "artifact clear" "plugin clear"s
 - Add url to background href / a element.
 - Override FTL files plugin behavior?
+- ArtifactParseContext is strange in what is stored there.
+- Parsers should avoid reading in all the bytes to memory.
+- SHA-256 should include a download link
+- There should be download instructions that are specific for each processor.
+- Add a clear that clears all user settings / data command

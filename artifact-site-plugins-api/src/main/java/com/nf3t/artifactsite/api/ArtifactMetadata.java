@@ -135,4 +135,10 @@ public class ArtifactMetadata {
 	public String toString() {
         return getGroupId() + "." + getArtifactId() + " (" + getVersion() + ")";
     }
+    
+    public void updateFileMetadata(ArtifactInputDescriptor descriptor) {
+        setFileName(descriptor.fileName());
+        setSourceType(descriptor.sourceType().name().toLowerCase());
+        setSourceValue(descriptor.sourceValue());
+    }
 }

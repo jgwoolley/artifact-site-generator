@@ -46,6 +46,11 @@ class MavenArtifactParserTest {
             out.putNextEntry(new ZipEntry("META-INF/maven/com.acme/demo/pom.xml"));
             out.write("""
                     <project>
+                      <name>Demo Project</name>
+                      <description>A human-readable demo description.</description>
+                      <developers>
+                        <developer><name>Jane Developer</name></developer>
+                      </developers>
                       <scm>
                         <url>https://github.com/acme/demo</url>
                       </scm>
@@ -67,6 +72,9 @@ class MavenArtifactParserTest {
         assertThat(metadata.getGroupId()).isEqualTo("com.acme");
         assertThat(metadata.getArtifactId()).isEqualTo("demo");
         assertThat(metadata.getVersion()).isEqualTo("1.2.3");
+        assertThat(metadata.getArtifactName()).isEqualTo("Demo Project");
+        assertThat(metadata.getDescription()).isEqualTo("A human-readable demo description.");
+        assertThat(metadata.getAuthors()).containsExactly("Jane Developer");
         assertThat(metadata.getId()).isEqualTo("com.acme:demo:1.2.3");
         assertThat(metadata.getPluginId()).isEqualTo("maven");
         assertThat(metadata.getScmUrl()).isEqualTo("https://github.com/acme/demo");

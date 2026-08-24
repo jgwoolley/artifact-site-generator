@@ -45,6 +45,17 @@ class VsixArtifactParserTest {
                     </PackageManifest>
                     """).getBytes());
             out.closeEntry();
+            out.putNextEntry(new ZipEntry("extension/package.json"));
+            out.write("""
+                    {
+                      "displayName": "Package JSON Extension",
+                      "description": "A human-readable VSIX description.",
+                      "author": {"name": "Jane Developer"},
+                      "contributors": [{"name": "John Contributor"}],
+                      "repository": {"url": "https://github.com/acme/extension"}
+                    }
+                    """.getBytes());
+            out.closeEntry();
         }
 
         ArtifactMetadata metadata;
@@ -60,7 +71,10 @@ class VsixArtifactParserTest {
         assertThat(metadata.getArtifactId()).isEqualTo("artifact-id");
         assertThat(metadata.getVersion()).isEqualTo("1.2.3");
         assertThat(metadata.getGroupId()).isEqualTo("example.publisher");
-        assertThat(metadata.getArtifactName()).isEqualTo("Example Extension");
+        assertThat(metadata.getArtifactName()).isEqualTo("Package JSON Extension");
+        assertThat(metadata.getDescription()).isEqualTo("A human-readable VSIX description.");
+        assertThat(metadata.getAuthors()).containsExactly("Jane Developer", "John Contributor");
+        assertThat(metadata.getScmUrl()).isEqualTo("https://github.com/acme/extension");
         assertThat(metadata.getPluginId()).isEqualTo("vsix");
         assertThat(metadata.getSha256()).isNotBlank();
         assertThat(metadata.getFileSizeBytes()).isPositive();
@@ -97,5 +111,35 @@ class VsixArtifactParserTest {
         assertThat(metadata.getVersion()).isEqualTo("0.0.1");
         assertThat(metadata.getGroupId()).isEqualTo("publisher.name");
         assertThat(metadata.getArtifactName()).isEqualTo("VS Code Extension");
+    }
+
+    @Test
+    void parsesDisplayNameFromNamespacedMetadata() throws Exception {
+        Path vsix = Files.createTempFile("namespaced-sample", ".vsix");
+        try (ZipOutputStream out = new ZipOutputStream(Files.newOutputStream(vsix))) {
+            out.putNextEntry(new ZipEntry("extension.vsixmanifest"));
+            out.write(("""
+                    <?xml version="1.0" encoding="utf-8"?>
+                    <vsix:PackageManifest xmlns:vsix="http://schemas.microsoft.com/developer/vsx-schema/2011">
+                      <vsix:Metadata>
+                        <vsix:Identity Id="namespaced-artifact" Version="1.0.0" Publisher="publisher.name" />
+                        <vsix:DisplayName>Namespaced Extension</vsix:DisplayName>
+                      </vsix:Metadata>
+                    </vsix:PackageManifest>
+                    """).getBytes());
+            out.closeEntry();
+        }
+
+        ArtifactMetadata metadata;
+        try (InputStream input = Files.newInputStream(vsix)) {
+            metadata = parser.parse(new ArtifactInputDescriptor(
+                    ArtifactSourceType.LOCAL,
+                    vsix.toString(),
+                    vsix.getFileName().toString(),
+                    "vsix",
+                    "application/zip"), input, new ArtifactParseContext());
+        }
+
+        assertThat(metadata.getArtifactName()).isEqualTo("Namespaced Extension");
     }
 }

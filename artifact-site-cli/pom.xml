@@ -9,6 +9,17 @@
   </parent>
 
   <artifactId>artifact-site-cli</artifactId>
+  <name>Artifact Site Plugins CLI</name>
+  <description>Generates documentation for artifacts.</description>
+  <developers>
+    <developer><name>jgwoolley</name></developer>
+  </developers>
+  <scm>
+    <url>https://github.com/jgwoolley/artifact-site-generator</url>
+    <connection>scm:git:git://github.com/jgwoolley/artifact-site-generator.git</connection>
+    <developerConnection>scm:git:ssh://github.com/jgwoolley/artifact-site-generator.git</developerConnection>
+    <tag>HEAD</tag>
+  </scm>
 
   <dependencies>
     <dependency>
