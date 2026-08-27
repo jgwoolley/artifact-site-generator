@@ -2,7 +2,6 @@ package com.nf3t.artifactsite.cli;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import java.io.InputStream;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -21,9 +20,10 @@ import org.pf4j.DefaultPluginManager;
 import org.pf4j.PluginClassLoader;
 import org.pf4j.PluginLoader;
 
+import com.nf3t.artifactsite.api.ArtifactInputDescriptor;
 import com.nf3t.artifactsite.api.ArtifactParser;
 import com.nf3t.artifactsite.api.ArtifactParserPlugin;
-import com.nf3t.artifactsite.api.ArtifactSourceType;
+import com.nf3t.artifactsite.api.IArtifactParseContext;
 
 import picocli.CommandLine;
 import tools.jackson.databind.ObjectMapper;
@@ -60,13 +60,11 @@ class ArtifactSiteGeneratorCliTest {
                 return false;
             }
 
-            @Override
-            public com.nf3t.artifactsite.api.ArtifactMetadata parse(
-                    com.nf3t.artifactsite.api.ArtifactInputDescriptor descriptor,
-                    InputStream input,
-                    com.nf3t.artifactsite.api.ArtifactParseContext context) {
-                return null;
-            }
+			@Override
+			public void parse(ArtifactInputDescriptor descriptor, IArtifactParseContext context) throws Exception {
+				// TODO Auto-generated method stub
+				
+			}
         };
 
         DefaultPluginManager pluginManager = new DefaultPluginManager(Collections.emptyList()) {
@@ -107,12 +105,10 @@ class ArtifactSiteGeneratorCliTest {
                     }
 
                     @Override
-                    public com.nf3t.artifactsite.api.ArtifactMetadata parse(
-                            com.nf3t.artifactsite.api.ArtifactInputDescriptor descriptor,
-                            InputStream input,
-                            com.nf3t.artifactsite.api.ArtifactParseContext context) {
-                        return null;
-                    }
+        			public void parse(ArtifactInputDescriptor descriptor, IArtifactParseContext context) throws Exception {
+        				// TODO Auto-generated method stub
+        				
+        			}
                 };
             }
         };
@@ -173,19 +169,6 @@ class ArtifactSiteGeneratorCliTest {
 
         assertThat(artifacts.save()).singleElement().extracting(
                 com.nf3t.artifactsite.api.ArtifactMetadata::getDescription).isEqualTo("new");
-    }
-
-    @Test
-    void artifactInputDescriptorParseRemoteResolvesSourceAndExtension() {
-        var descriptor = com.nf3t.artifactsite.api.ArtifactInputDescriptor.parseRemote(
-                "https://example.com/releases/sample.vsix",
-                null,
-                "application/zip");
-
-        assertThat(descriptor.sourceType()).isEqualTo(ArtifactSourceType.REMOTE);
-        assertThat(descriptor.sourceValue()).isEqualTo("https://example.com/releases/sample.vsix");
-        assertThat(descriptor.fileName()).isEqualTo("sample.vsix");
-        assertThat(descriptor.extension()).isEqualTo("vsix");
     }
 
     @Test

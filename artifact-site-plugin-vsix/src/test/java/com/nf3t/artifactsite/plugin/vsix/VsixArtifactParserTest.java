@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
@@ -12,8 +13,8 @@ import org.junit.jupiter.api.Test;
 
 import com.nf3t.artifactsite.api.ArtifactInputDescriptor;
 import com.nf3t.artifactsite.api.ArtifactMetadata;
-import com.nf3t.artifactsite.api.ArtifactParseContext;
 import com.nf3t.artifactsite.api.ArtifactSourceType;
+import com.nf3t.artifactsite.api.IArtifactParseContext;
 
 class VsixArtifactParserTest {
 
@@ -22,7 +23,7 @@ class VsixArtifactParserTest {
     @Test
     void supportsVsixFiles() {
         ArtifactInputDescriptor descriptor = new ArtifactInputDescriptor(
-                ArtifactSourceType.LOCAL,
+                null, ArtifactSourceType.LOCAL,
                 "/tmp/sample.vsix",
                 "sample.vsix",
                 "vsix",
@@ -58,16 +59,23 @@ class VsixArtifactParserTest {
             out.closeEntry();
         }
 
-        ArtifactMetadata metadata;
+        final AtomicReference<ArtifactMetadata> metadataRef = new AtomicReference<>();
         try (InputStream input = Files.newInputStream(vsix)) {
-            metadata = parser.parse(new ArtifactInputDescriptor(
-                    ArtifactSourceType.LOCAL,
+            parser.parse(new ArtifactInputDescriptor(
+            		vsix, ArtifactSourceType.LOCAL,
                     vsix.toString(),
                     vsix.getFileName().toString(),
                     "vsix",
-                    "application/zip"), input, new ArtifactParseContext());
+                    "application/zip"), new IArtifactParseContext() {
+						@Override
+						public void writeArtifact(ArtifactMetadata artifact) {
+							metadataRef.set(artifact);
+						}
+            	
+            });
         }
-
+        
+        ArtifactMetadata metadata = metadataRef.get();
         assertThat(metadata.getArtifactId()).isEqualTo("artifact-id");
         assertThat(metadata.getVersion()).isEqualTo("1.2.3");
         assertThat(metadata.getGroupId()).isEqualTo("example.publisher");
@@ -97,15 +105,23 @@ class VsixArtifactParserTest {
             out.closeEntry();
         }
 
-        ArtifactMetadata metadata;
+        final AtomicReference<ArtifactMetadata> metadataRef = new AtomicReference<>();
         try (InputStream input = Files.newInputStream(vsix)) {
-            metadata = parser.parse(new ArtifactInputDescriptor(
-                    ArtifactSourceType.LOCAL,
+             parser.parse(new ArtifactInputDescriptor(
+            		vsix, ArtifactSourceType.LOCAL,
                     vsix.toString(),
                     vsix.getFileName().toString(),
                     "vsix",
-                    "application/zip"), input, new ArtifactParseContext());
+                    "application/zip"), new IArtifactParseContext() {
+
+						@Override
+						public void writeArtifact(ArtifactMetadata artifact) {
+							metadataRef.set(artifact);
+						}
+            	 
+             });
         }
+        ArtifactMetadata metadata = metadataRef.get();
 
         assertThat(metadata.getArtifactId()).isEqualTo("vscode-artifact");
         assertThat(metadata.getVersion()).isEqualTo("0.0.1");
@@ -130,16 +146,24 @@ class VsixArtifactParserTest {
             out.closeEntry();
         }
 
-        ArtifactMetadata metadata;
+        final AtomicReference<ArtifactMetadata> metadataRef = new AtomicReference<>();
         try (InputStream input = Files.newInputStream(vsix)) {
-            metadata = parser.parse(new ArtifactInputDescriptor(
-                    ArtifactSourceType.LOCAL,
+            parser.parse(new ArtifactInputDescriptor(
+                    vsix, ArtifactSourceType.LOCAL,
                     vsix.toString(),
                     vsix.getFileName().toString(),
                     "vsix",
-                    "application/zip"), input, new ArtifactParseContext());
-        }
+                    "application/zip"), new IArtifactParseContext() {
 
+				@Override
+				public void writeArtifact(ArtifactMetadata artifact) {
+					metadataRef.set(artifact);
+				}
+    	 
+     });
+        }
+        
+        ArtifactMetadata metadata = metadataRef.get();
         assertThat(metadata.getArtifactName()).isEqualTo("Namespaced Extension");
     }
 }

@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
@@ -12,8 +13,8 @@ import org.junit.jupiter.api.Test;
 
 import com.nf3t.artifactsite.api.ArtifactInputDescriptor;
 import com.nf3t.artifactsite.api.ArtifactMetadata;
-import com.nf3t.artifactsite.api.ArtifactParseContext;
 import com.nf3t.artifactsite.api.ArtifactSourceType;
+import com.nf3t.artifactsite.api.IArtifactParseContext;
 
 class MavenArtifactParserTest {
 
@@ -22,7 +23,7 @@ class MavenArtifactParserTest {
     @Test
     void supportsJarFiles() {
         ArtifactInputDescriptor descriptor = new ArtifactInputDescriptor(
-                ArtifactSourceType.LOCAL,
+                null, ArtifactSourceType.LOCAL,
                 "/tmp/sample.jar",
                 "sample.jar",
                 "jar",
@@ -59,15 +60,22 @@ class MavenArtifactParserTest {
             out.closeEntry();
         }
 
-        ArtifactMetadata metadata;
+        final AtomicReference<ArtifactMetadata> metadataRef = new AtomicReference<>();
         try (InputStream input = Files.newInputStream(jar)) {
-            metadata = parser.parse(new ArtifactInputDescriptor(
-                    ArtifactSourceType.LOCAL,
+            parser.parse(new ArtifactInputDescriptor(
+            		jar, ArtifactSourceType.LOCAL,
                     jar.toString(),
                     "demo-1.2.3.jar",
                     "jar",
-                    "application/java-archive"), input, new ArtifactParseContext());
+                    "application/java-archive"), new IArtifactParseContext() {
+						@Override
+						public void writeArtifact(ArtifactMetadata artifact) {
+							metadataRef.set(artifact);
+						}
+            });
         }
+        
+        ArtifactMetadata metadata = metadataRef.get();
 
         assertThat(metadata.getGroupId()).isEqualTo("com.acme");
         assertThat(metadata.getArtifactId()).isEqualTo("demo");
@@ -103,15 +111,21 @@ class MavenArtifactParserTest {
             out.closeEntry();
         }
 
-        ArtifactMetadata metadata;
+        final AtomicReference<ArtifactMetadata> metadataRef = new AtomicReference<>();
         try (InputStream input = Files.newInputStream(jar)) {
-            metadata = parser.parse(new ArtifactInputDescriptor(
-                    ArtifactSourceType.LOCAL,
+            parser.parse(new ArtifactInputDescriptor(
+            		jar, ArtifactSourceType.LOCAL,
                     jar.toString(),
                     "demo-1.2.3-all.jar",
                     "jar",
-                    "application/java-archive"), input, new ArtifactParseContext());
+                    "application/java-archive"), new IArtifactParseContext() {
+				@Override
+				public void writeArtifact(ArtifactMetadata artifact) {
+					metadataRef.set(artifact);
+				}
+    });
         }
+        ArtifactMetadata metadata = metadataRef.get();
 
         assertThat(metadata.getGroupId()).isEqualTo("com.acme");
         assertThat(metadata.getArtifactId()).isEqualTo("demo");

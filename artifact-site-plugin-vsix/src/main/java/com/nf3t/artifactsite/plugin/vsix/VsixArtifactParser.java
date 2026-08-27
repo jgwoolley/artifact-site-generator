@@ -2,13 +2,16 @@ package com.nf3t.artifactsite.plugin.vsix;
 
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
+import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
+
 import javax.xml.parsers.DocumentBuilderFactory;
+
 import org.jspecify.annotations.Nullable;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
@@ -16,8 +19,10 @@ import org.w3c.dom.NodeList;
 
 import com.nf3t.artifactsite.api.ArtifactInputDescriptor;
 import com.nf3t.artifactsite.api.ArtifactMetadata;
-import com.nf3t.artifactsite.api.ArtifactParseContext;
 import com.nf3t.artifactsite.api.ArtifactParser;
+import com.nf3t.artifactsite.api.IArtifactParseContext;
+import com.nf3t.artifactsite.api.PathUtils;
+
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
@@ -41,45 +46,49 @@ public class VsixArtifactParser implements ArtifactParser {
     }
 
     /** {@inheritDoc} */
-    /** {@inheritDoc} */
     @Override
-    public ArtifactMetadata parse(ArtifactInputDescriptor descriptor, InputStream input, ArtifactParseContext context)
+    public void parse(ArtifactInputDescriptor descriptor, IArtifactParseContext context)
             throws Exception {
-        byte[] content = input.readAllBytes();
-
-        // 1. Parse the document ONCE
-        Document doc = parseManifest(content);
-
-        // 2. Extract values from document
-        Element identity = readIdentity(doc);
-
-        String artifactId = identity.getAttribute("Id");
-        String version = identity.getAttribute("Version");
-        String groupId = identity.getAttribute("Publisher");
-        PackageMetadata packageMetadata = readPackageMetadata(content);
-        String artifactName = firstNonBlank(packageMetadata.displayName(), readDisplayName(doc, artifactId), artifactId);
-        
-        // Extract the Source URL property
-        String sourceUrl = firstNonBlank(
-                packageMetadata.repositoryUrl(),
-                readProperty(doc, SOURCE_LINK_PROPERTY));
-
-        // 3. Populate metadata
+    	
         ArtifactMetadata metadata = new ArtifactMetadata();
-        metadata.setArtifactId(artifactId);
-        metadata.setVersion(version);
-        metadata.setGroupId(groupId);
-        metadata.setArtifactName(artifactName);
-        metadata.setDescription(firstNonBlank(packageMetadata.description(), readDescription(doc)));
-        metadata.setAuthors(packageMetadata.authors());
-        metadata.setId(groupId + ":" + artifactId + ":" + version);
-        metadata.setFileSizeBytes(content.length);
-        metadata.updateFileMetadata(descriptor);
-        metadata.setSha256(context.sha256(content));
-        metadata.setPluginId("vsix");
-        metadata.setScmUrl(sourceUrl);
-        
-        return metadata;
+
+    	try(InputStream input = Files.newInputStream(descriptor.contentPath())) {
+    		byte[] content = input.readAllBytes();
+
+            // 1. Parse the document ONCE
+            Document doc = parseManifest(content);
+
+            // 2. Extract values from document
+            Element identity = readIdentity(doc);
+
+            String artifactId = identity.getAttribute("Id");
+            String version = identity.getAttribute("Version");
+            String groupId = identity.getAttribute("Publisher");
+            PackageMetadata packageMetadata = readPackageMetadata(content);
+            String artifactName = firstNonBlank(packageMetadata.displayName(), readDisplayName(doc, artifactId), artifactId);
+            
+            // Extract the Source URL property
+            String sourceUrl = firstNonBlank(
+                    packageMetadata.repositoryUrl(),
+                    readProperty(doc, SOURCE_LINK_PROPERTY));
+
+            // 3. Populate metadata
+            metadata.setArtifactId(artifactId);
+            metadata.setVersion(version);
+            metadata.setGroupId(groupId);
+            metadata.setArtifactName(artifactName);
+            metadata.setDescription(firstNonBlank(packageMetadata.description(), readDescription(doc)));
+            metadata.setAuthors(packageMetadata.authors());
+            metadata.setId(groupId + ":" + artifactId + ":" + version);
+            metadata.setFileSizeBytes(content.length);
+            metadata.updateFileMetadata(descriptor);
+            metadata.setPluginId("vsix");
+            metadata.setScmUrl(sourceUrl);            
+    	}
+    	
+    	String sha256 = PathUtils.sha256(descriptor.contentPath());
+    	metadata.setSha256(sha256);
+        context.writeArtifact(metadata);
     }
 
     /**

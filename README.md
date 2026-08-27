@@ -280,3 +280,7 @@ Implementation detail:
 - SHA-256 should include a download link
 - There should be download instructions that are specific for each processor.
 - Add a clear that clears all user settings / data command
+- Add DisplayNames / Display Descriptions for artifact types. artifact types (home page should not include recent artifacts)
+- hover over on file size shows true bytes.
+- Maven description
+- Search should give a hint on what it matched against.

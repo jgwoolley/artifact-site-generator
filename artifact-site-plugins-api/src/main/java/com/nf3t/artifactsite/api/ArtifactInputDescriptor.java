@@ -1,8 +1,5 @@
 package com.nf3t.artifactsite.api;
 
-import java.io.IOException;
-import java.net.URI;
-import java.nio.file.Files;
 import java.nio.file.Path;
 
 import org.jspecify.annotations.Nullable;
@@ -17,41 +14,26 @@ import org.jspecify.annotations.Nullable;
  * @param contentType resolved content type, if known
  */
 public record ArtifactInputDescriptor(
+		Path contentPath,
         ArtifactSourceType sourceType,
         String sourceValue,
         @Nullable String fileName,
         @Nullable String extension,
         @Nullable String contentType) {
 
-    public static ArtifactInputDescriptor parseLocal(Path path) {
-        String extension = PathUtils.getExtension(path);
-        String contentType = "application/octet-stream";
-        try {
-            contentType = Files.probeContentType(path);
-        } catch (IOException ignored) {
-
-        }
-        return new ArtifactInputDescriptor(ArtifactSourceType.LOCAL, path.toString(), path.getFileName().toString(), extension, contentType);
-    }
-
-    /**
-     * Builds a descriptor for a remote artifact URL.
-     *
-     * @param url remote artifact URL
-     * @param fileName resolved file name, if known
-     * @param contentType resolved content type, if known
-     * @return remote artifact descriptor
-     */
-    public static ArtifactInputDescriptor parseRemote(String url, @Nullable String fileName, @Nullable String contentType) {
-        String resolvedFileName = fileName;
-        if (resolvedFileName == null || resolvedFileName.isBlank()) {
-            String path = URI.create(url).getPath();
-            int lastSeparator = path.lastIndexOf('/');
-            if (lastSeparator >= 0 && lastSeparator < path.length() - 1) {
-                resolvedFileName = path.substring(lastSeparator + 1);
-            }
-        }
-        String extension = resolvedFileName == null ? null : PathUtils.getExtension(Path.of(resolvedFileName));
-        return new ArtifactInputDescriptor(ArtifactSourceType.REMOTE, url, resolvedFileName, extension, contentType);
-    }
+   public ArtifactMetadata createArtifact() {
+	   ArtifactMetadata artifact = new ArtifactMetadata();
+	   artifact.setSourceType(sourceType.name().toLowerCase());
+	   artifact.setSourceValue(sourceValue);
+	   
+	   if (ArtifactSourceType.REMOTE == sourceType) {
+		   artifact.setSourceType(ArtifactSourceType.REMOTE.name().toLowerCase());
+           artifact.setDownloadUrl(sourceValue);
+           if (fileName != null) {
+               artifact.setFileName(fileName);
+           }
+       }
+	   
+	   return artifact;
+   }
 }

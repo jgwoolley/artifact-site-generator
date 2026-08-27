@@ -3,6 +3,7 @@ package com.nf3t.artifactsite.plugin.maven;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
+import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashSet;
@@ -21,8 +22,9 @@ import org.w3c.dom.NodeList;
 
 import com.nf3t.artifactsite.api.ArtifactInputDescriptor;
 import com.nf3t.artifactsite.api.ArtifactMetadata;
-import com.nf3t.artifactsite.api.ArtifactParseContext;
 import com.nf3t.artifactsite.api.ArtifactParser;
+import com.nf3t.artifactsite.api.IArtifactParseContext;
+import com.nf3t.artifactsite.api.PathUtils;
 
 /**
  * Parser for Maven-published JAR files.
@@ -45,28 +47,33 @@ public class MavenArtifactParser implements ArtifactParser {
 
     /** {@inheritDoc} */
     @Override
-    public ArtifactMetadata parse(ArtifactInputDescriptor descriptor, InputStream input, ArtifactParseContext context)
+    public void parse(ArtifactInputDescriptor descriptor, IArtifactParseContext context)
             throws Exception {
-        byte[] content = input.readAllBytes();
-        PomCandidate selected = selectPomCandidate(content, descriptor.fileName())
-                .orElseThrow(() -> new IllegalArgumentException("JAR missing META-INF/maven/**/pom.properties"));
-
+    	
         ArtifactMetadata metadata = new ArtifactMetadata();
-        metadata.setGroupId(selected.groupId());
-        metadata.setArtifactId(selected.artifactId());
-        metadata.setVersion(selected.version());
-        metadata.setArtifactName(selected.artifactId());
-        metadata.setId(selected.groupId() + ":" + selected.artifactId() + ":" + selected.version());
-        PomModel pom = readPom(content, selected.path());
-        metadata.setDescription(firstNonBlank(pom.description(), selected.description()));
-        metadata.setAuthors(pom.authors());
-        metadata.setArtifactName(firstNonBlank(pom.name(), selected.artifactName(), selected.artifactId()));
-        metadata.updateFileMetadata(descriptor);
-        metadata.setFileSizeBytes(content.length);
-        metadata.setSha256(context.sha256(content));
-        metadata.setPluginId("maven");
-        metadata.setScmUrl(readScmUrl(content, selected.path()).orElse(null));
-        return metadata;
+    	try(InputStream input = Files.newInputStream(descriptor.contentPath())) {
+    		byte[] content = input.readAllBytes();
+            PomCandidate selected = selectPomCandidate(content, descriptor.fileName())
+                    .orElseThrow(() -> new IllegalArgumentException("JAR missing META-INF/maven/**/pom.properties"));
+
+            metadata.setGroupId(selected.groupId());
+            metadata.setArtifactId(selected.artifactId());
+            metadata.setVersion(selected.version());
+            metadata.setArtifactName(selected.artifactId());
+            metadata.setId(selected.groupId() + ":" + selected.artifactId() + ":" + selected.version());
+            PomModel pom = readPom(content, selected.path());
+            metadata.setDescription(firstNonBlank(pom.description(), selected.description()));
+            metadata.setAuthors(pom.authors());
+            metadata.setArtifactName(firstNonBlank(pom.name(), selected.artifactName(), selected.artifactId()));
+            metadata.updateFileMetadata(descriptor);
+            metadata.setFileSizeBytes(content.length);
+            metadata.setPluginId("maven");
+            metadata.setScmUrl(readScmUrl(content, selected.path()).orElse(null));          
+    	}   
+    	
+    	String sha256 = PathUtils.sha256(descriptor.contentPath());
+    	metadata.setSha256(sha256);
+        context.writeArtifact(metadata);
     }
 
     private Optional<PomCandidate> selectPomCandidate(byte[] content, @Nullable String jarFileName) throws Exception {

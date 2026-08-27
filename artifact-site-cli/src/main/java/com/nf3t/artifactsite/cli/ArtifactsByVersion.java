@@ -1,7 +1,7 @@
 package com.nf3t.artifactsite.cli;
 
-import java.util.LinkedHashMap;
 import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 import com.nf3t.artifactsite.api.ArtifactMetadata;
