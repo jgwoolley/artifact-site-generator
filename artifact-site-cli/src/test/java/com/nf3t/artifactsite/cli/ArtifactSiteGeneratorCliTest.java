@@ -3,6 +3,7 @@ package com.nf3t.artifactsite.cli;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.io.IOException;
+import java.lang.reflect.Field;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Collections;
@@ -19,8 +20,10 @@ import org.pf4j.DefaultPluginDescriptor;
 import org.pf4j.DefaultPluginManager;
 import org.pf4j.PluginClassLoader;
 import org.pf4j.PluginLoader;
+import org.slf4j.LoggerFactory;
 
 import com.nf3t.artifactsite.api.ArtifactInputDescriptor;
+import com.nf3t.artifactsite.api.ArtifactMetadata;
 import com.nf3t.artifactsite.api.ArtifactParser;
 import com.nf3t.artifactsite.api.ArtifactParserPlugin;
 import com.nf3t.artifactsite.api.IArtifactParseContext;
@@ -140,6 +143,66 @@ class ArtifactSiteGeneratorCliTest {
         new CommandLine(cli).parseArgs("--plugin-dir", customPluginDir.toString(), "generate");
 
         assertThat(cli.pluginLoadDirs()).isEqualTo(List.of(XdgPaths.pluginDir(), customPluginDir));
+    }
+
+    @Test
+    void parseRemoteInputWithoutHeadersDoesNotTreatInputAsHttpHeader() throws IOException {
+        String originalUserHome = System.getProperty("user.home");
+        Path pluginDir = tempDir.resolve("plugins");
+        Files.createDirectories(pluginDir);
+        System.setProperty("user.home", tempDir.toString());
+        try {
+            int exitCode = new CommandLine(new ArtifactSiteGeneratorCli())
+                    .execute(
+                            "--plugin-dir",
+                            pluginDir.toString(),
+                            "parse",
+                            "http://127.0.0.1:1/test.vsix");
+
+            assertThat(exitCode).isZero();
+        } finally {
+            System.setProperty("user.home", originalUserHome);
+        }
+    }
+
+    @Test
+    void writeArtifactPersistsRemoteRequestConfigForCurrentRemoteInput() throws Exception {
+        Path cachedFile = tempDir.resolve("cached.vsix");
+        Files.writeString(cachedFile, "artifact-content");
+
+        RemoteTlsConfig tls = new RemoteTlsConfig();
+        tls.setTrustStorePath(tempDir.resolve("truststore.p12").toString());
+        RemoteRequestConfigStore store = new RemoteRequestConfigStore();
+        ArtifactParseContext context = new ArtifactParseContext(
+                LoggerFactory.getLogger(ArtifactParseContext.class),
+                tls,
+                tempDir.resolve("cache"),
+                List.of("Authorization=******"),
+                store,
+                List.of(),
+                new ArtifactsByParser());
+
+        setField(context, "currentArtifactInput", "https://example.com/sample.vsix");
+        setField(context, "currentArtifactInputRemote", true);
+        setField(context, "currentRemoteDownloadResult", new RemoteDownloadResult(cachedFile, "sample.vsix", "application/octet-stream"));
+
+        ArtifactMetadata artifact = new ArtifactMetadata();
+        artifact.setId("publisher:sample:1.0.0");
+        context.writeArtifact(artifact);
+
+        RemoteRequestConfig saved = store.getRequestsByArtifactId().get("publisher:sample:1.0.0");
+        assertThat(saved).isNotNull();
+        assertThat(saved.getSourceType()).isEqualTo("remote");
+        assertThat(saved.getSourceValue()).isEqualTo("https://example.com/sample.vsix");
+        assertThat(saved.getCachedPath()).isEqualTo(cachedFile.toString());
+        assertThat(saved.getHeaders()).containsEntry("Authorization", "******");
+        assertThat(saved.getTls()).isSameAs(tls);
+    }
+
+    private static void setField(Object target, String fieldName, Object value) throws Exception {
+        Field field = target.getClass().getDeclaredField(fieldName);
+        field.setAccessible(true);
+        field.set(target, value);
     }
 
     /**

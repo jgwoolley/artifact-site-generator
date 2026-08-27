@@ -6,7 +6,6 @@ import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -29,19 +28,21 @@ public class ArtifactParseContext implements IArtifactParseContext {
 	private RemoteRequestConfigStore remoteRequestConfigStore;
 	private List<ArtifactParserPlugin> plugins;
 	private ArtifactsByParser artifacts;
+    private String currentArtifactInput;
+    private boolean currentArtifactInputRemote;
+    private RemoteDownloadResult currentRemoteDownloadResult;
 	
 	
-	public ArtifactParseContext(Logger logger, RemoteTlsConfig remoteTlsConfig, Path remoteCacheDir, List<String> httpHeaders, List<ArtifactParserPlugin> plugins, ArtifactsByParser artifacts) {
-		this.logger = logger;
-		this.remoteArtifactDownloader = new RemoteArtifactDownloader();
-		this.remoteTlsConfig = remoteTlsConfig;
-		this.remoteCacheDir = remoteCacheDir;
-		this.httpHeaders = new ArrayList<>(0); // TODO: Remote artifacts seem broken...
-		this.plugins = plugins;
-		this.artifacts = artifacts;
-	}
-	
-	// TODO: REMOTE REQUEST Doesn't get carried through all the way...
+    public ArtifactParseContext(Logger logger, RemoteTlsConfig remoteTlsConfig, Path remoteCacheDir, List<String> httpHeaders, RemoteRequestConfigStore remoteRequestConfigStore, List<ArtifactParserPlugin> plugins, ArtifactsByParser artifacts) {
+    	this.logger = logger;
+    	this.remoteArtifactDownloader = new RemoteArtifactDownloader();
+    	this.remoteTlsConfig = remoteTlsConfig;
+    	this.remoteCacheDir = remoteCacheDir;
+    	this.httpHeaders = httpHeaders == null ? new ArrayList<>(0) : new ArrayList<>(httpHeaders);
+        this.remoteRequestConfigStore = remoteRequestConfigStore;
+    	this.plugins = plugins;
+    	this.artifacts = artifacts;
+    }
 	
     private void updateRemoteRequestConfig(
             RemoteRequestConfigStore store,
@@ -104,8 +105,16 @@ public class ArtifactParseContext implements IArtifactParseContext {
     	if (artifact == null) {
             return;
         }
-    	
+     	
     	artifacts.put(artifact);
+        if (remoteRequestConfigStore != null && currentArtifactInput != null) {
+            updateRemoteRequestConfig(
+                    remoteRequestConfigStore,
+                    artifact,
+                    currentArtifactInputRemote,
+                    currentRemoteDownloadResult,
+                    currentArtifactInput);
+        }
     }
     
     
@@ -132,6 +141,7 @@ public class ArtifactParseContext implements IArtifactParseContext {
         Map<String, String> headers = parseHeaders(httpHeaders);
 		try {
 			RemoteDownloadResult remoteDownloadResult = remoteArtifactDownloader.download(artifactInput, headers, remoteTlsConfig, remoteCacheDir);
+            currentRemoteDownloadResult = remoteDownloadResult;
             Path parsePath = remoteDownloadResult.localPath();            
             String fileName = remoteDownloadResult.fileName();
             String contentType = remoteDownloadResult.contentType();
@@ -165,6 +175,9 @@ public class ArtifactParseContext implements IArtifactParseContext {
 	
 	public void parseInputPath(String artifactInput) {
 		logger.debug("Input Artifact: {}", artifactInput);
+        currentArtifactInput = artifactInput;
+        currentArtifactInputRemote = isRemoteInput(artifactInput);
+        currentRemoteDownloadResult = null;
 
 		ArtifactInputDescriptor descriptor = createArtifactInputDescriptor(artifactInput);
 		
