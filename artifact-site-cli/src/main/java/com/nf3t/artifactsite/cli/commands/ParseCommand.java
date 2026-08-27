@@ -65,7 +65,14 @@ public class ParseCommand implements Runnable {
         RemoteRequestConfigStore remoteRequestConfigStore = parentCommand.loadRemoteRequestConfigStore();
 
         RemoteTlsConfig remoteTlsConfig = buildTlsConfig();
-        ArtifactParseContext context = new ArtifactParseContext(LOGGER, remoteTlsConfig, remoteTlsClientCert, artifactInputs, plugins, artifacts);
+        ArtifactParseContext context = new ArtifactParseContext(
+                LOGGER,
+                remoteTlsConfig,
+                parentCommand.remoteCacheDir(),
+                httpHeaders,
+                remoteRequestConfigStore,
+                plugins,
+                artifacts);
         
         context.parseInputPaths(artifactInputs);
         
