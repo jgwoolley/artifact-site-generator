@@ -69,7 +69,7 @@ class MavenArtifactParserTest {
                     "jar",
                     "application/java-archive"), new IArtifactParseContext() {
 						@Override
-						public void writeArtifact(ArtifactMetadata artifact) {
+						public void writeArtifact(ArtifactInputDescriptor descriptor, ArtifactMetadata artifact) {
 							metadataRef.set(artifact);
 						}
             });
@@ -120,7 +120,7 @@ class MavenArtifactParserTest {
                     "jar",
                     "application/java-archive"), new IArtifactParseContext() {
 				@Override
-				public void writeArtifact(ArtifactMetadata artifact) {
+				public void writeArtifact(ArtifactInputDescriptor descriptor, ArtifactMetadata artifact) {
 					metadataRef.set(artifact);
 				}
     });

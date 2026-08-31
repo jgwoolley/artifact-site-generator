@@ -72,7 +72,6 @@
               <Plugin-Id>maven</Plugin-Id>
               <Plugin-Version>${project.version}</Plugin-Version>
               <Plugin-Provider>jgwoolley</Plugin-Provider>
-              <Plugin-Class>com.nf3t.artifactsite.plugin.maven.MavenPf4jPlugin</Plugin-Class>
             </manifestEntries>
           </archive>
         </configuration>

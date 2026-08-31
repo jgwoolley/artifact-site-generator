@@ -81,7 +81,6 @@
               <Plugin-Id>vsix</Plugin-Id>
               <Plugin-Version>${project.version}</Plugin-Version>
               <Plugin-Provider>jgwoolley</Plugin-Provider>
-              <Plugin-Class>com.nf3t.artifactsite.plugin.vsix.VsixPf4jPlugin</Plugin-Class>
             </manifestEntries>
           </archive>
         </configuration>

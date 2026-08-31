@@ -28,9 +28,6 @@ public class ArtifactParseContext implements IArtifactParseContext {
 	private RemoteRequestConfigStore remoteRequestConfigStore;
 	private List<ArtifactParserPlugin> plugins;
 	private ArtifactsByParser artifacts;
-    private String currentArtifactInput;
-    private boolean currentArtifactInputRemote;
-    private RemoteDownloadResult currentRemoteDownloadResult;
 	
 	
     public ArtifactParseContext(Logger logger, RemoteTlsConfig remoteTlsConfig, Path remoteCacheDir, List<String> httpHeaders, RemoteRequestConfigStore remoteRequestConfigStore, List<ArtifactParserPlugin> plugins, ArtifactsByParser artifacts) {
@@ -47,14 +44,17 @@ public class ArtifactParseContext implements IArtifactParseContext {
     private void updateRemoteRequestConfig(
             RemoteRequestConfigStore store,
             ArtifactMetadata artifact,
-            boolean remoteInput,
-            RemoteDownloadResult remoteDownloadResult, String artifactInput) {
+            ArtifactInputDescriptor descriptor) {
         String artifactId = artifact.getId();
         if (artifactId == null || artifactId.isBlank()) {
             return;
         }
 
-        if (!remoteInput) {
+        if (descriptor.sourceType() != ArtifactSourceType.REMOTE) {
+            if (store.getRequestsByArtifactId().containsKey(artifactId)) {
+                logger.info("Removing stored remote fetch configuration for artifact {} because it was (re)parsed from a local input ({})",
+                        artifactId, descriptor.sourceValue());
+            }
             store.remove(artifactId);
             return;
         }
@@ -62,10 +62,8 @@ public class ArtifactParseContext implements IArtifactParseContext {
         RemoteRequestConfig requestConfig = new RemoteRequestConfig();
         requestConfig.setArtifactId(artifactId);
         requestConfig.setSourceType(ArtifactSourceType.REMOTE.name().toLowerCase());
-        requestConfig.setSourceValue(artifactInput);
-        if (remoteDownloadResult != null) {
-            requestConfig.setCachedPath(remoteDownloadResult.localPath().toString());
-        }
+        requestConfig.setSourceValue(descriptor.sourceValue());
+        requestConfig.setCachedPath(descriptor.contentPath().toString());
         requestConfig.setHeaders(parseHeaders(httpHeaders));
         requestConfig.setTls(remoteTlsConfig.isEmpty() ? null : remoteTlsConfig);
         store.put(artifactId, requestConfig);
@@ -101,19 +99,19 @@ public class ArtifactParseContext implements IArtifactParseContext {
     }
 	
     @Override
-    public void writeArtifact(ArtifactMetadata artifact) {
+    public void writeArtifact(ArtifactInputDescriptor descriptor, ArtifactMetadata artifact) {
     	if (artifact == null) {
             return;
         }
-     	
+
+        // The descriptor is the trusted source of truth for "what input produced this
+        // artifact" — stamped here rather than left to the parser plugin, since
+        // ArtifactParserPlugin is a PF4J extension point and a third-party plugin isn't
+        // guaranteed to have called ArtifactMetadata.updateFileMetadata(descriptor) itself.
+        artifact.updateFileMetadata(descriptor);
     	artifacts.put(artifact);
-        if (remoteRequestConfigStore != null && currentArtifactInput != null) {
-            updateRemoteRequestConfig(
-                    remoteRequestConfigStore,
-                    artifact,
-                    currentArtifactInputRemote,
-                    currentRemoteDownloadResult,
-                    currentArtifactInput);
+        if (remoteRequestConfigStore != null) {
+            updateRemoteRequestConfig(remoteRequestConfigStore, artifact, descriptor);
         }
     }
     
@@ -138,11 +136,10 @@ public class ArtifactParseContext implements IArtifactParseContext {
 	}
 	
 	private ArtifactInputDescriptor createArtifactRemoteInputDescriptor(String artifactInput) {
-        Map<String, String> headers = parseHeaders(httpHeaders);
 		try {
+	        Map<String, String> headers = parseHeaders(httpHeaders);
 			RemoteDownloadResult remoteDownloadResult = remoteArtifactDownloader.download(artifactInput, headers, remoteTlsConfig, remoteCacheDir);
-            currentRemoteDownloadResult = remoteDownloadResult;
-            Path parsePath = remoteDownloadResult.localPath();            
+            Path parsePath = remoteDownloadResult.localPath();
             String fileName = remoteDownloadResult.fileName();
             String contentType = remoteDownloadResult.contentType();
             
@@ -175,12 +172,20 @@ public class ArtifactParseContext implements IArtifactParseContext {
 	
 	public void parseInputPath(String artifactInput) {
 		logger.debug("Input Artifact: {}", artifactInput);
-        currentArtifactInput = artifactInput;
-        currentArtifactInputRemote = isRemoteInput(artifactInput);
-        currentRemoteDownloadResult = null;
 
-		ArtifactInputDescriptor descriptor = createArtifactInputDescriptor(artifactInput);
-		
+		ArtifactInputDescriptor descriptor;
+		try {
+			descriptor = createArtifactInputDescriptor(artifactInput);
+		} catch (Exception e) {
+			// Never let a single bad input (e.g. a malformed --http-header value,
+			// or any other unexpected failure) abort the whole batch: doing so
+			// would skip saveArtifacts()/saveRemoteRequestConfigStore() in
+			// ParseCommand and silently drop every artifact already parsed from
+			// earlier inputs in this run.
+			logger.error("Could not create input descriptor for {}", artifactInput, e);
+			return;
+		}
+
         for (ArtifactParserPlugin plugin : plugins) {
             final var parser = plugin.parser();
             if (!parser.supports(descriptor)) {

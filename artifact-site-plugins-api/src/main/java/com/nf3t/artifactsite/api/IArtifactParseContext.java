@@ -5,5 +5,5 @@ package com.nf3t.artifactsite.api;
  */
 public interface IArtifactParseContext {
 
-	public void writeArtifact(ArtifactMetadata artifact);
+	public void writeArtifact(ArtifactInputDescriptor descriptor, ArtifactMetadata artifact);
 }

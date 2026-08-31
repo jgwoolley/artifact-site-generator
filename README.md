@@ -1,115 +1,37 @@
 # Artifact Site Generator
 
-A Java CLI that parses release artifacts and generates a fully static artifact registry site.
+A Java CLI that parses release artifacts (VSIX extensions, Maven/JAR artifacts, and more via plugins) and generates a fully static, browsable artifact registry site inspired by the Eclipse OpenVSIX registry UI.
 
-## Goals
+## How it works
 
-- Parse local or remote artifacts through plugins.
-- Persist normalized metadata in a local catalog.
-- Generate a static website that looks similar to the Eclipse OpenVSIX registry experience.
-- Keep the output hostable from any static file host (GitHub Pages, S3 static hosting, Nginx, Apache, etc.).
+1. Install parser plugins with `add-plugin`.
+2. Parse local files or remote URLs with `parse`. Metadata is normalized and appended to a local JSON catalog.
+3. Run `generate` to render the catalog into a static site (HTML, CSS, JS, search index) that can be hosted
+   from any static file host (GitHub Pages, S3, Nginx, Apache, etc.) with no backend service required.
 
-## Technology Choices
+## Technology
 
-### Core Runtime
-
-- **Java 17**
-- **Maven** (multi-module build)
+- **Java 17**, **Maven** (multi-module build)
 - **picocli** for CLI command parsing
 - **PF4J** for parser plugin discovery and loading
 - **Apache HttpClient 5** for remote artifact download/streaming
-- **Jackson** (`jackson-databind`, `jackson-dataformat-yaml`) for metadata and config serialization
+- **Jackson** for metadata and config serialization
 - **Apache FreeMarker** for static HTML templating
 - **SLF4J + slf4j-simple** for logging
+- **JUnit 5 + AssertJ**, with Maven Surefire/Failsafe for unit/integration test separation
 
-### Testing
+## Modules
 
-- **JUnit 5**
-- **AssertJ**
-- **Maven Surefire + Failsafe** for unit/integration test separation
+- `artifact-site-plugins-api` - shared plugin interfaces and metadata model contracts
+- `artifact-site-cli` - main executable CLI: plugin loading, parse pipeline, static site generation
+- `artifact-site-plugin-vsix` - VSIX parser plugin
+- `artifact-site-plugin-maven` - Maven/JAR parser plugin
 
-## Repository / Module Plan
+The CLI builds as an uberjar via `maven-shade-plugin`. Plugin modules depend on CLI-supplied libraries as `provided`, so the CLI owns the shared runtime version and plugin JARs stay lightweight.
 
-The Maven multi-module project contains:
+## CLI commands
 
-- `artifact-site-parent` (root pom)
-- `artifact-site-plugins-api`
-  - Shared plugin interfaces and metadata model contracts
-- `artifact-site-cli`
-  - Main executable CLI, plugin loading, parse pipeline, static site generation
-- `artifact-site-plugin-vsix`
-  - VSIX parser plugin
-- `artifact-site-plugin-maven`
-  - Maven/JAR parser plugin
-- `artifact-site-plugin-nifi-nar`
-  - Apache NiFi NAR parser plugin
-
-Build the CLI as an uberjar using `maven-shade-plugin`.
-
-Plugin modules may use libraries already supplied by the CLI as `provided` dependencies. This keeps plugin JARs lightweight and ensures the CLI owns the shared runtime version.
-
-## XDG Paths (Concrete Locations)
-
-The CLI currently uses `XDG_DATA_HOME` with an explicit fallback:
-
-- **Plugin directory**
-  - `${XDG_DATA_HOME:-~/.local/share}/artifact-site-generator/plugins`
-- **Artifact catalog**
-  - `${XDG_DATA_HOME:-~/.local/share}/artifact-site-generator/artifacts.json`
-- **Remote download cache**
-  - `${XDG_DATA_HOME:-~/.local/share}/artifact-site-generator/remote-cache`
-- **Remote request configuration**
-  - `${XDG_DATA_HOME:-~/.local/share}/artifact-site-generator/remote-requests.json`
-- **Generated static site output**
-  - `./public` by default (override with `--output`)
-
-## Data Model
-
-Each parsed artifact record should include:
-
-- `id` (stable unique id, e.g., hash or `<group>:<artifact>:<version>`)
-- `artifactName` (human-readable project name) **required**
-- `artifactId` **required**
-- `groupId` **required**
-- `version` **required**
-- `description`
-- `authors` (list)
-- `tags` (list)
-- `license`
-- `createdAt` (parse timestamp)
-- `sourceType` (`local` or `remote`)
-- `sourceValue` (local path or URL)
-- `downloadUrl` (final URL used by the site download button)
-- `fileName`
-- `fileSizeBytes`
-- `sha256`
-- `pluginId` (which parser produced this record)
-- Remote request headers and TLS settings are stored separately in
-  `remote-requests.json`, keyed by artifact ID.
-
-Catalog storage format:
-
-- `${XDG_DATA_HOME:-~/.local/share}/artifact-site-generator/artifacts.json`
-- `${XDG_DATA_HOME:-~/.local/share}/artifact-site-generator/remote-requests.json`
-
-## Plugin API Plan
-
-Define in `artifact-site-plugins-api`:
-
-- `ArtifactParserPlugin` (PF4J extension point)
-- `ArtifactParser` interface:
-  - `supports(ArtifactInputDescriptor descriptor): boolean`
-  - `parse(ArtifactInputDescriptor descriptor, InputStream input, ArtifactParseContext context): ArtifactMetadata`
-- `ArtifactInputDescriptor`:
-  - input type, file name, extension, content type hints
-- `ArtifactParseContext`:
-  - checksum utilities
-  - safe temp workspace
-  - metadata writer helpers
-
-Plugins decide artifact compatibility and produce normalized metadata only.
-
-## CLI Command Plan
+All commands accept the global `--plugin-dir <path>` and `--artifact-json <path>` options to override the default XDG-based locations below.
 
 ### `add-plugin`
 
@@ -117,43 +39,44 @@ Plugins decide artifact compatibility and produce normalized metadata only.
 artifact-site-generator add-plugin /path/to/plugin.jar
 ```
 
-- Copies JAR into `${XDG_DATA_HOME:-~/.local/share}/artifact-site-generator/plugins`.
-- If the destination file already exists, it is replaced.
-- Use `--plugin-dir /path/to/plugins` to install into a custom plugin directory.
-- Validates readable JAR and deduplicates by filename/hash.
+Copies the JAR into the plugin directory, replacing any existing file with the same name + version.
+
+### `list-plugins`
+
+Loads plugins from the plugin directory and prints each plugin's ID and registered extensions.
+
+### `clear-plugins`
+
+Deletes every JAR in the plugin directory.
 
 ### `parse`
 
-Local file:
-
 ```sh
 artifact-site-generator parse /path/to/example.vsix
-```
-
-Remote URL:
-
-```sh
 artifact-site-generator parse https://example.com/releases/example.vsix
 ```
 
-Behavior:
+- Accepts any number of local paths and/or remote URLs in one call.
+- Loads parser plugins and picks the first one whose `supports(...)` matches the input.
+- Remote inputs are downloaded via Apache HttpClient 5 before parsing. Supports repeatable
+  `--http-header "Name=Value"` options and TLS options (`--remote-tls-trust-store`,
+  `--remote-tls-trust-store-password`, `--remote-tls-client-cert`, `--remote-tls-client-key`,
+  `--remote-tls-client-key-password`).
+- Parsed metadata is appended/updated in the catalog: records are identified by a stable artifact ID, and
+  re-parsing the same artifact replaces its record while other versions are retained.
+- `downloadUrl` resolution: remote inputs keep their source URL; local files are copied into
+  `./public/downloads/<artifactId>/<version>/<fileName>` during `generate`.
+- Effective remote request metadata (headers, TLS settings) is persisted separately in
+  `remote-requests.json`, keyed by artifact ID, so it never ends up in the catalog consumed by the site
+  generator.
 
-- Detect parser plugin via `supports`.
-- Loads parser plugins from the default XDG plugin directory and, when provided, `--plugin-dir`.
-- Parse metadata and append/update the catalog. Equal records are identified by
-  their stable artifact ID; when the same record is read again, the later
-  metadata replaces the earlier record while other versions are retained.
-- Resolve `downloadUrl`:
-  - If input is **remote URL**, `downloadUrl` must be that exact URL.
-  - If input is **local file**, the generator copies it to
-    `./public/downloads/<artifactId>/<version>/<fileName>` and uses the
-    corresponding relative path.
+### `list-artifacts`
 
-- Remote inputs are downloaded with Apache HttpClient 5 before parser invocation.
-- Repeatable `--http-header "Name=Value"` options are supported.
-- Trust-store and client-certificate TLS options are supported.
-- Effective remote request metadata is persisted separately in
-  `remote-requests.json`.
+Loads plugins and the catalog, then prints every parsed artifact record.
+
+### `info`
+
+Prints the resolved plugin directory, catalog path, remote cache directory, and remote request config path.
 
 ### `generate`
 
@@ -161,11 +84,8 @@ Behavior:
 artifact-site-generator generate --output ./public
 ```
 
-- Reads catalog and renders static files.
-- Produces all pages, assets, and search index.
-- Never requires a runtime backend service.
-- Generated pages automatically support light/dark mode via system preference.
-- Optional banner can be added globally:
+Reads the catalog and renders the static site: all pages, assets, and the search index. Optionally set a
+global banner shown on every page:
 
 ```sh
 artifact-site-generator generate \
@@ -176,98 +96,75 @@ artifact-site-generator generate \
   --bannerBackgroundColorLight="white"
 ```
 
-## Static Site Construction Plan
+Generated pages support light/dark mode via system preference.
 
-Use FreeMarker templates in `artifact-site-cli/src/main/resources/templates`:
+## XDG paths
 
-- `layout.ftl` (base shell)
-- `index.ftl` (registry listing page)
-- `artifact.ftl` (artifact detail page)
-- `tag.ftl` (tag filtered listing page)
+- Plugin directory: `${XDG_DATA_HOME:-~/.local/share}/artifact-site-generator/plugins`
+- Artifact catalog: `${XDG_DATA_HOME:-~/.local/share}/artifact-site-generator/artifacts.json`
+- Remote download cache: `${XDG_DATA_HOME:-~/.local/share}/artifact-site-generator/remote-cache`
+- Remote request config: `${XDG_DATA_HOME:-~/.local/share}/artifact-site-generator/remote-requests.json`
+- Generated static site: `./public` by default (override with `--output`)
 
-Generated output in `./public`:
+## Data model
 
-- `index.html`: Table lists unique parsers.
-- `artifacts/<parser-type>/index.html`: Table lists unique `<group-id>.<artifact-id>`, pulls info from latest version.
-- `artifacts/<parser-type>/<group-id>.<artifact-id>/index.html`: Table lists all artifact's versions, sorts by latest.
-- `artifacts/<parser-type>/<group-id>.<artifact-id>/<version>/index.html`
-- `tags/<tag>/index.html`
-- `assets/styles.css`
-- `assets/app.js`
-- `assets/logo.svg`
-- `search-index.json`
-- `downloads/...` (for local artifact inputs only)
+Each catalog record (`ArtifactMetadata`) includes:
 
-Artifact parser metadata sources:
+- `id` (stable unique id, e.g., hash or `<group>:<artifact>:<version>`)
+- `artifactName`, `artifactId`, `groupId`, `version` - required
+- `description`, `authors` (list), `tags` (list), `license`
+- `createdAt` (parse timestamp)
+- `sourceType` (`local` or `remote`), `sourceValue` (local path or URL)
+- `downloadUrl`, `fileName`, `fileSizeBytes`, `sha256`
+- `pluginId` (which parser produced this record)
 
-- Maven reads `name`, `description`, `developers`, and `scm` from the
-  embedded `META-INF/maven/<group>/<artifact>/pom.xml`.
-- VSIX reads `displayName`, `description`, `author`, `contributors`, and
-  `repository` from the packaged `package.json`, with manifest fallbacks for
-  display name, description, and source URL.
+Parser-specific metadata sources:
 
-## UI/UX Direction (OpenVSIX-Inspired)
+- **Maven**: reads `name`, `description`, `developers`, and `scm` from the embedded
+  `META-INF/maven/<group>/<artifact>/pom.xml`.
+- **VSIX**: reads `displayName`, `description`, `author`, `contributors`, and `repository` from the packaged
+  `package.json`, with manifest fallbacks for display name, description, and source URL.
 
-Match the OpenVSIX registry feel with:
+## Plugin API
 
-- Top navigation with logo + search input
-- Grid/list cards showing name, version, tags, and short description
-- Artifact detail page with:
-  - title, metadata table, version, authors, tags
-  - clear **Download** button using `downloadUrl`
-- Clean spacing, neutral light theme, subtle card borders/shadows
-- Responsive layout for desktop/tablet/mobile
+Defined in `artifact-site-plugins-api`:
 
-Implementation detail:
+- `ArtifactParserPlugin` - PF4J extension point
+- `ArtifactParser` - `supports(ArtifactInputDescriptor)`, `parse(ArtifactInputDescriptor, InputStream, ArtifactParseContext)`
+- `ArtifactInputDescriptor` - input type, file name, extension, content type hints
+- `IArtifactParseContext` - checksum utilities, safe temp workspace, metadata writer helpers
 
-- Use server-free client-side filtering via `search-index.json` and vanilla JS.
-- Keep CSS in a single static stylesheet; no runtime CSS framework required.
+Plugins decide artifact compatibility and produce normalized metadata only; they never write the catalog
+directly.
 
-## End-to-End Flow
+## Generated site layout
 
-1. User installs parser plugins with `add-plugin`.
-2. User runs `parse` for any number of local files or remote URLs.
-3. CLI updates catalog metadata.
-4. User runs `generate`.
-5. The generator copies local artifacts into `./public/downloads/...` and the
-   static site appears in `./public` and can be hosted as-is.
+Rendered from FreeMarker templates in `artifact-site-cli/src/main/resources/templates`
+(`layout.ftl`, `index.ftl`, `artifact.ftl`, `tag.ftl`) into `./public`:
 
-## Non-Goals
+- `index.html` - lists unique parsers
+- `artifacts/<parser-type>/index.html` - lists unique `<group-id>.<artifact-id>`, using each one's latest version
+- `artifacts/<parser-type>/<group-id>.<artifact-id>/index.html` - lists all versions of an artifact, latest first
+- `artifacts/<parser-type>/<group-id>.<artifact-id>/<version>/index.html` - artifact detail page
+- `tags/<tag>/index.html` - tag-filtered listing
+- `assets/styles.css`, `assets/app.js`, `assets/logo.svg`
+- `search-index.json` - powers client-side search/filter (vanilla JS, no runtime CSS framework)
+- `downloads/...` - copies of locally-sourced artifacts only
 
-- No database
-- No server-side rendering at request time
-- No authentication/authorization layer in this project
+## Non-goals
+
+- No database, no server-side rendering at request time
+- No authentication/authorization layer
 - No artifact upload API
 
-## Delivery Milestones
+## Status
 
-- [x] **Bootstrap**
-  - Multi-module Maven setup, CLI entrypoint, plugin loading.
-- [x] **Plugin API**
-  - Contracts, validation, metadata schema.
-- [x] **Initial Plugin**
-  - VSIX
-- [x] **Catalog Persistence**
-  - JSON catalog read/write/update rules.
-- [x] **Break up ArtifactSiteGeneratorCli.java**
-  - Moved CLI subcommands into focused command classes under `artifact-site-cli/src/main/java/com/nf3t/artifactsite/cli/`.
-- [x] **Implement ArtifactSourceType.REMOTE**
-  - Use Apache HttpClient 5 for download support.
-  - Support CLI-provided TLS settings and HTTP headers.
-  - Persist remote request configuration with artifact metadata. But seperate from artifacts.json (because artifacts.json will be used by static site generator)
-- [x] **Static Generator**
-  - FreeMarker templates + output assets.
-- [x] **OpenVSIX-style UI**
-  - Listing/detail pages
-- [x] **Client-side search/filter**
-- [ ] **More Plugins**
-  - [x] VSIX
-  - VintageStory Mod
-  - Chrome Browser Extension
-  - [x] Java JAR / Maven
-  - NiFi NAR
-- [ ] **Hardening**
-  - Input validation, tests, docs, packaging, release steps.
+Bootstrap, plugin API, catalog persistence, remote parsing, static generation, and the OpenVSIX-style UI with
+client-side search are implemented and working. Remaining work:
+
+- [ ] More parser plugins: VintageStory Mod, Chrome Browser Extension, NiFi NAR (module not yet wired into
+      the root `pom.xml`)
+- [ ] Hardening: broader input validation, more tests, docs, packaging, release steps
 
 ## TODO
 
@@ -284,3 +181,4 @@ Implementation detail:
 - hover over on file size shows true bytes.
 - Maven description
 - Search should give a hint on what it matched against.
+- SHA256 stuff should get moved back into cli. All common stuff should happen preprocessor.

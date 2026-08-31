@@ -81,14 +81,13 @@ public class VsixArtifactParser implements ArtifactParser {
             metadata.setAuthors(packageMetadata.authors());
             metadata.setId(groupId + ":" + artifactId + ":" + version);
             metadata.setFileSizeBytes(content.length);
-            metadata.updateFileMetadata(descriptor);
             metadata.setPluginId("vsix");
             metadata.setScmUrl(sourceUrl);            
     	}
     	
     	String sha256 = PathUtils.sha256(descriptor.contentPath());
     	metadata.setSha256(sha256);
-        context.writeArtifact(metadata);
+        context.writeArtifact(descriptor, metadata);
     }
 
     /**

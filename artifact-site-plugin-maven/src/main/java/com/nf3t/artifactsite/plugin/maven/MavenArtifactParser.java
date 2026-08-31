@@ -65,7 +65,6 @@ public class MavenArtifactParser implements ArtifactParser {
             metadata.setDescription(firstNonBlank(pom.description(), selected.description()));
             metadata.setAuthors(pom.authors());
             metadata.setArtifactName(firstNonBlank(pom.name(), selected.artifactName(), selected.artifactId()));
-            metadata.updateFileMetadata(descriptor);
             metadata.setFileSizeBytes(content.length);
             metadata.setPluginId("maven");
             metadata.setScmUrl(readScmUrl(content, selected.path()).orElse(null));          
@@ -73,7 +72,7 @@ public class MavenArtifactParser implements ArtifactParser {
     	
     	String sha256 = PathUtils.sha256(descriptor.contentPath());
     	metadata.setSha256(sha256);
-        context.writeArtifact(metadata);
+        context.writeArtifact(descriptor, metadata);
     }
 
     private Optional<PomCandidate> selectPomCandidate(byte[] content, @Nullable String jarFileName) throws Exception {

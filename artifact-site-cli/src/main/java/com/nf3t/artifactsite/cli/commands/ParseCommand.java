@@ -74,10 +74,14 @@ public class ParseCommand implements Runnable {
                 plugins,
                 artifacts);
         
-        context.parseInputPaths(artifactInputs);
-        
-        parentCommand.saveArtifacts(artifacts);
-        parentCommand.saveRemoteRequestConfigStore(remoteRequestConfigStore);
+        try {
+            context.parseInputPaths(artifactInputs);
+        } finally {
+            // Always persist whatever was successfully parsed, even if an
+            // unexpected exception escaped parsing one of the inputs.
+            parentCommand.saveArtifacts(artifacts);
+            parentCommand.saveRemoteRequestConfigStore(remoteRequestConfigStore);
+        }
     }
     
     private RemoteTlsConfig buildTlsConfig() {

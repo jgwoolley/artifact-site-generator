@@ -68,7 +68,7 @@ class VsixArtifactParserTest {
                     "vsix",
                     "application/zip"), new IArtifactParseContext() {
 						@Override
-						public void writeArtifact(ArtifactMetadata artifact) {
+						public void writeArtifact(ArtifactInputDescriptor descriptor, ArtifactMetadata artifact) {
 							metadataRef.set(artifact);
 						}
             	
@@ -115,7 +115,7 @@ class VsixArtifactParserTest {
                     "application/zip"), new IArtifactParseContext() {
 
 						@Override
-						public void writeArtifact(ArtifactMetadata artifact) {
+						public void writeArtifact(ArtifactInputDescriptor descriptor, ArtifactMetadata artifact) {
 							metadataRef.set(artifact);
 						}
             	 
@@ -156,7 +156,7 @@ class VsixArtifactParserTest {
                     "application/zip"), new IArtifactParseContext() {
 
 				@Override
-				public void writeArtifact(ArtifactMetadata artifact) {
+				public void writeArtifact(ArtifactInputDescriptor descriptor, ArtifactMetadata artifact) {
 					metadataRef.set(artifact);
 				}
     	 

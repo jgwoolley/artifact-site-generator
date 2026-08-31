@@ -3,7 +3,6 @@ package com.nf3t.artifactsite.cli;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.io.IOException;
-import java.lang.reflect.Field;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Collections;
@@ -26,6 +25,7 @@ import com.nf3t.artifactsite.api.ArtifactInputDescriptor;
 import com.nf3t.artifactsite.api.ArtifactMetadata;
 import com.nf3t.artifactsite.api.ArtifactParser;
 import com.nf3t.artifactsite.api.ArtifactParserPlugin;
+import com.nf3t.artifactsite.api.ArtifactSourceType;
 import com.nf3t.artifactsite.api.IArtifactParseContext;
 
 import picocli.CommandLine;
@@ -182,13 +182,17 @@ class ArtifactSiteGeneratorCliTest {
                 List.of(),
                 new ArtifactsByParser());
 
-        setField(context, "currentArtifactInput", "https://example.com/sample.vsix");
-        setField(context, "currentArtifactInputRemote", true);
-        setField(context, "currentRemoteDownloadResult", new RemoteDownloadResult(cachedFile, "sample.vsix", "application/octet-stream"));
+        ArtifactInputDescriptor descriptor = new ArtifactInputDescriptor(
+                cachedFile,
+                ArtifactSourceType.REMOTE,
+                "https://example.com/sample.vsix",
+                "sample.vsix",
+                "vsix",
+                "application/octet-stream");
 
         ArtifactMetadata artifact = new ArtifactMetadata();
         artifact.setId("publisher:sample:1.0.0");
-        context.writeArtifact(artifact);
+        context.writeArtifact(descriptor, artifact);
 
         RemoteRequestConfig saved = store.getRequestsByArtifactId().get("publisher:sample:1.0.0");
         assertThat(saved).isNotNull();
@@ -197,12 +201,6 @@ class ArtifactSiteGeneratorCliTest {
         assertThat(saved.getCachedPath()).isEqualTo(cachedFile.toString());
         assertThat(saved.getHeaders()).containsEntry("Authorization", "******");
         assertThat(saved.getTls()).isSameAs(tls);
-    }
-
-    private static void setField(Object target, String fieldName, Object value) throws Exception {
-        Field field = target.getClass().getDeclaredField(fieldName);
-        field.setAccessible(true);
-        field.set(target, value);
     }
 
     /**
