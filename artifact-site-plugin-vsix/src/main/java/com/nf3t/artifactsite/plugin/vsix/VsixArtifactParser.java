@@ -33,7 +33,14 @@ public class VsixArtifactParser implements ArtifactParser {
 
     private static final String SOURCE_LINK_PROPERTY = "Microsoft.VisualStudio.Services.Links.Source";
     private static final String PACKAGE_JSON_SUFFIX = "/package.json";
+    private static final String ICON_RESOURCE_NAME = "icon.svg";
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+
+    /** {@inheritDoc} */
+    @Override
+    public String iconResourceName() {
+        return ICON_RESOURCE_NAME;
+    }
 
     /** {@inheritDoc} */
     @Override

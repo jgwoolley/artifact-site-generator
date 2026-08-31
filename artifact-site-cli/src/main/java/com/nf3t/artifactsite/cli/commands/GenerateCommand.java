@@ -92,11 +92,12 @@ public class GenerateCommand implements Runnable {
         copyAsset("assets/app.js", outputRoot.resolve("assets/app.js"));
         copyAsset("assets/logo.svg", outputRoot.resolve("assets/logo.svg"));
 
-        GenerationModel model = buildModel(artifactCatalog, outputRoot);
+        Map<String, String> parserIconUrls = copyParserIcons(parentCommand.iconsDir(), outputRoot);
+        GenerationModel model = buildModel(artifactCatalog, outputRoot, parserIconUrls);
         writeSearchIndex(outputRoot.resolve("search-index.json"), model.searchIndexEntries());
 
         Configuration freemarker = createFreemarkerConfiguration();
-        writeTemplate(freemarker, "index.ftl", outputRoot.resolve("index.html"), createRootIndexData(model));
+        writeTemplate(freemarker, "index.ftl", outputRoot.resolve("index.html"), createRootIndexData(model, parserIconUrls));
 
         for (ParserGroup parserGroup : model.parserGroups()) {
             Path parserIndexPath = outputRoot.resolve("artifacts").resolve(parserGroup.parserSegment()).resolve("index.html");
@@ -155,7 +156,9 @@ public class GenerateCommand implements Runnable {
         }
     }
 
-    private GenerationModel buildModel(List<ArtifactMetadata> artifactCatalog, Path outputRoot) throws IOException {
+    private GenerationModel buildModel(
+            List<ArtifactMetadata> artifactCatalog, Path outputRoot, Map<String, String> parserIconUrls)
+            throws IOException {
         Map<String, Map<String, List<ArtifactMetadata>>> grouped = new LinkedHashMap<>();
 
         for (ArtifactMetadata artifact : artifactCatalog) {
@@ -196,7 +199,8 @@ public class GenerateCommand implements Runnable {
                 String latestVersionSegment = toPathSegment(safe(latest.getVersion()));
                 String detailUrl = toArtifactDetailUrl(parserSegment, artifactSegment, latestVersionSegment);
 
-                Map<String, Object> latestCard = createArtifactCard(latest, parserName, detailUrl);
+                String parserIconUrl = parserIconUrls.getOrDefault(parserName, "");
+                Map<String, Object> latestCard = createArtifactCard(latest, parserName, detailUrl, parserIconUrl);
                 latestArtifacts.add(latestCard);
                 allLatestArtifactCards.add(latestCard);
                 searchEntries.add(createSearchEntry(latestCard));
@@ -239,6 +243,7 @@ public class GenerateCommand implements Runnable {
                     detailPage.put("fileSizeBytes", version.getFileSizeBytes());
                     detailPage.put("fileSizeHumanReadable", formatFileSize(version.getFileSizeBytes()));
                     detailPage.put("downloadUrl", downloadUrl);
+                    detailPage.put("icon", parserIconUrl);
                     detailPage.put("tags", normalizeTags(version.getTags()));
                     detailPage.put("authors", normalizeTags(version.getAuthors()));
                     detailPages.add(detailPage);
@@ -260,13 +265,14 @@ public class GenerateCommand implements Runnable {
         return new GenerationModel(parserGroups, allLatestArtifactCards, searchEntries, tagCards);
     }
 
-    private Map<String, Object> createRootIndexData(GenerationModel model) {
+    private Map<String, Object> createRootIndexData(GenerationModel model, Map<String, String> parserIconUrls) {
         List<Map<String, Object>> parserSummaries = new ArrayList<>();
         for (ParserGroup parserGroup : model.parserGroups()) {
             Map<String, Object> parserSummary = new HashMap<>();
             parserSummary.put("parserName", parserGroup.parserName());
             parserSummary.put("artifactCount", parserGroup.latestArtifacts().size());
             parserSummary.put("url", "/artifacts/" + parserGroup.parserSegment() + "/index.html");
+            parserSummary.put("icon", parserIconUrls.getOrDefault(parserGroup.parserName(), ""));
             parserSummaries.add(parserSummary);
         }
 
@@ -315,6 +321,38 @@ public class GenerateCommand implements Runnable {
     private void writeSearchIndex(Path outputPath, List<Map<String, Object>> searchEntries) throws IOException {
         Files.createDirectories(Objects.requireNonNull(outputPath.getParent()));
         OBJECT_MAPPER.writerWithDefaultPrettyPrinter().writeValue(outputPath.toFile(), searchEntries);
+    }
+
+    /**
+     * Copies each cached parser icon (see {@code ParserIconCache}) into the generated
+     * site's assets and returns each icon's site-relative URL keyed by parser plugin id.
+     *
+     * @param iconsDir icon cache directory populated by {@code parse}
+     * @param outputRoot generated site output root
+     * @return site-relative icon URL by parser plugin id
+     */
+    private Map<String, String> copyParserIcons(Path iconsDir, Path outputRoot) throws IOException {
+        Map<String, String> parserIconUrls = new HashMap<>();
+        if (!Files.isDirectory(iconsDir)) {
+            return parserIconUrls;
+        }
+
+        Path iconsOutputDir = outputRoot.resolve("assets/icons");
+        try (var iconFiles = Files.list(iconsDir)) {
+            for (Path iconFile : (Iterable<Path>) iconFiles::iterator) {
+                if (!Files.isRegularFile(iconFile)) {
+                    continue;
+                }
+                String fileName = iconFile.getFileName().toString();
+                int extensionSeparator = fileName.lastIndexOf('.');
+                String pluginId = extensionSeparator > 0 ? fileName.substring(0, extensionSeparator) : fileName;
+
+                Files.createDirectories(iconsOutputDir);
+                Files.copy(iconFile, iconsOutputDir.resolve(fileName), StandardCopyOption.REPLACE_EXISTING);
+                parserIconUrls.put(pluginId, "/assets/icons/" + encodePathSegment(fileName));
+            }
+        }
+        return parserIconUrls;
     }
 
     private void copyAsset(String classpathResource, Path destination) throws IOException {
@@ -379,7 +417,8 @@ public class GenerateCommand implements Runnable {
         return rootPath.toString();
     }
 
-    private static Map<String, Object> createArtifactCard(ArtifactMetadata artifact, String parserName, String detailUrl) {
+    private static Map<String, Object> createArtifactCard(
+            ArtifactMetadata artifact, String parserName, String detailUrl, String iconUrl) {
         Map<String, Object> card = new HashMap<>();
         card.put("name", displayName(artifact));
         card.put("version", safe(artifact.getVersion()));
@@ -389,6 +428,7 @@ public class GenerateCommand implements Runnable {
         card.put("parserType", parserName);
         card.put("groupId", safe(artifact.getGroupId()));
         card.put("artifactId", safe(artifact.getArtifactId()));
+        card.put("icon", iconUrl);
         return card;
     }
 

@@ -114,6 +114,15 @@ body {
 
 .artifact-card h3 {
   margin: 0 0 0.4rem;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.card-icon {
+  flex: none;
+  vertical-align: middle;
+  border-radius: 4px;
 }
 
 .artifact-card h3 a {

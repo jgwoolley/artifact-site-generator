@@ -104,6 +104,7 @@ Generated pages support light/dark mode via system preference.
 - Artifact catalog: `${XDG_DATA_HOME:-~/.local/share}/artifact-site-generator/artifacts.json`
 - Remote download cache: `${XDG_DATA_HOME:-~/.local/share}/artifact-site-generator/remote-cache`
 - Remote request config: `${XDG_DATA_HOME:-~/.local/share}/artifact-site-generator/remote-requests.json`
+- Parser icon cache: `${XDG_DATA_HOME:-~/.local/share}/artifact-site-generator/icons`
 - Generated static site: `./public` by default (override with `--output`)
 
 ## Data model
@@ -130,12 +131,26 @@ Parser-specific metadata sources:
 Defined in `artifact-site-plugins-api`:
 
 - `ArtifactParserPlugin` - PF4J extension point
-- `ArtifactParser` - `supports(ArtifactInputDescriptor)`, `parse(ArtifactInputDescriptor, InputStream, ArtifactParseContext)`
+- `ArtifactParser` - `supports(ArtifactInputDescriptor)`, `parse(ArtifactInputDescriptor, InputStream, ArtifactParseContext)`,
+  `iconResourceName()`, `openIconStream()`
 - `ArtifactInputDescriptor` - input type, file name, extension, content type hints
 - `IArtifactParseContext` - checksum utilities, safe temp workspace, metadata writer helpers
 
 Plugins decide artifact compatibility and produce normalized metadata only; they never write the catalog
 directly.
+
+### Parser icons
+
+Every `ArtifactParser` must declare a default icon via `iconResourceName()` (e.g. `"icon.svg"`), returning the
+name of a classpath resource placed alongside the parser implementation class - its standard location (e.g.
+`com/nf3t/artifactsite/plugin/maven/icon.svg` next to `MavenArtifactParser`). `openIconStream()` (default
+method) loads it through the parser class's own classloader, so plugin-supplied icons work the same way inside
+PF4J's isolated plugin classloaders.
+
+`parse` caches each loaded plugin's icon into the icons cache directory (above), named `<pluginId>.<ext>` (e.g.
+`maven.svg`, `vsix.svg`), so `generate` can render icons without needing plugins loaded. `generate` copies
+cached icons into `assets/icons/` in the generated site and renders them on parser cards, artifact cards, and
+artifact detail pages.
 
 ## Generated site layout
 
@@ -148,6 +163,7 @@ Rendered from FreeMarker templates in `artifact-site-cli/src/main/resources/temp
 - `artifacts/<parser-type>/<group-id>.<artifact-id>/<version>/index.html` - artifact detail page
 - `tags/<tag>/index.html` - tag-filtered listing
 - `assets/styles.css`, `assets/app.js`, `assets/logo.svg`
+- `assets/icons/<pluginId>.<ext>` - each parser plugin's default icon, copied from the icons cache
 - `search-index.json` - powers client-side search/filter (vanilla JS, no runtime CSS framework)
 - `downloads/...` - copies of locally-sourced artifacts only
 

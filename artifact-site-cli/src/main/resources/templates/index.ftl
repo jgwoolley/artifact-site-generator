@@ -6,6 +6,7 @@
       <div class="grid parser-grid">
         <#list parserSummaries as parser>
           <a class="card parser-card" href="${rootPath}${parser.url?remove_beginning('/')}">
+            <#if parser.icon?has_content><img class="card-icon" src="${rootPath}${parser.icon?remove_beginning('/')}" alt="" width="24" height="24"></#if>
             <strong>${parser.parserName?html}</strong>
             <span>${parser.artifactCount} artifact(s)</span>
           </a>
@@ -20,7 +21,10 @@
       <div class="grid artifact-grid" data-search-target="cards">
         <#list artifactCards as artifact>
           <article class="card artifact-card" data-entry-url="${artifact.url}">
-            <h3><a href="${rootPath}${artifact.url?remove_beginning('/')}">${artifact.name?html}</a></h3>
+            <h3>
+              <#if artifact.icon?has_content><img class="card-icon" src="${rootPath}${artifact.icon?remove_beginning('/')}" alt="" width="20" height="20"></#if>
+              <a href="${rootPath}${artifact.url?remove_beginning('/')}">${artifact.name?html}</a>
+            </h3>
             <p class="meta">${artifact.groupId?html}.${artifact.artifactId?html} • ${artifact.version?html} • ${artifact.parserType?html}</p>
             <p>${artifact.description?html}</p>
             <div class="tags">

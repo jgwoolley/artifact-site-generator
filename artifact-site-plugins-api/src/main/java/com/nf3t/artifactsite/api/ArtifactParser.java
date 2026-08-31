@@ -1,5 +1,7 @@
 package com.nf3t.artifactsite.api;
 
+import java.io.InputStream;
+
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -22,4 +24,24 @@ public interface ArtifactParser {
      * @throws Exception when parsing fails
      */
     public void parse(ArtifactInputDescriptor descriptor, IArtifactParseContext context) throws Exception;
+
+    /**
+     * Returns the resource name of this parser's default icon (e.g. {@code "icon.svg"}).
+     * The resource is expected to live in the standard location alongside the parser
+     * implementation class, i.e. as a classpath resource in the same package as
+     * {@code getClass()}, so it can be resolved with {@link Class#getResourceAsStream(String)}.
+     *
+     * @return icon resource name, resolved relative to the parser implementation class
+     */
+    public String iconResourceName();
+
+    /**
+     * Opens this parser's default icon, loaded by a classloader rooted at the parser
+     * implementation class.
+     *
+     * @return icon input stream, or {@code null} when the declared resource cannot be found
+     */
+    default @Nullable InputStream openIconStream() {
+        return getClass().getResourceAsStream(iconResourceName());
+    }
 }

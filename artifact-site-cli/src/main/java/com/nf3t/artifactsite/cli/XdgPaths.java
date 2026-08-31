@@ -50,4 +50,17 @@ public final class XdgPaths {
         }
         return Path.of(dataHome, "artifact-site-generator", "remote-requests.json");
     }
+
+    /**
+     * Returns the directory where parser plugin default icons are cached.
+     *
+     * @return icons cache directory path
+     */
+    public static Path iconsDir() {
+        String dataHome = System.getenv("XDG_DATA_HOME");
+        if (dataHome == null || dataHome.isBlank()) {
+            dataHome = Path.of(System.getProperty("user.home"), ".local", "share").toString();
+        }
+        return Path.of(dataHome, "artifact-site-generator", "icons");
+    }
 }

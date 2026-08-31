@@ -68,6 +68,11 @@ class ArtifactSiteGeneratorCliTest {
 				// TODO Auto-generated method stub
 				
 			}
+
+			@Override
+			public String iconResourceName() {
+				return "icon.svg";
+			}
         };
 
         DefaultPluginManager pluginManager = new DefaultPluginManager(Collections.emptyList()) {
@@ -112,6 +117,11 @@ class ArtifactSiteGeneratorCliTest {
         				// TODO Auto-generated method stub
         				
         			}
+
+                    @Override
+                    public String iconResourceName() {
+                        return "icon.svg";
+                    }
                 };
             }
         };

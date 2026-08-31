@@ -104,6 +104,15 @@ public class ArtifactSiteGeneratorCli implements Runnable {
         return XdgPaths.remoteRequestConfigPath();
     }
 
+    /**
+     * Returns the directory where parser plugin default icons are cached.
+     *
+     * @return icons cache directory path
+     */
+    public Path iconsDir() {
+        return XdgPaths.iconsDir();
+    }
+
     public ArtifactsByParser loadArtifacts() {
         Path artifactJsonPath = artifactJsonPath();
         List<ArtifactMetadata> artifactList = new ArrayList<>(1);

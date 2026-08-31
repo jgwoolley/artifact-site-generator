@@ -1,6 +1,9 @@
 <#import "layout.ftl" as layout>
 <@layout.page title=title rootPath=rootPath pageHeading=pageHeading pageDescription=description>
-  <p class="meta">${groupId?html}.${artifactId?html} • version ${version?html} • parser ${parserType?html}</p>
+  <p class="meta">
+    <#if icon?has_content><img class="card-icon" src="${rootPath}${icon?remove_beginning('/')}" alt="" width="20" height="20"></#if>
+    ${groupId?html}.${artifactId?html} • version ${version?html} • parser ${parserType?html}
+  </p>
 
   <p>
     <a class="download-button" href="${downloadUrl?html}">Download</a>
