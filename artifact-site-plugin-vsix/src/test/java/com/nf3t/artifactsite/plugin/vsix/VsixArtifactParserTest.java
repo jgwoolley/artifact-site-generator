@@ -209,6 +209,87 @@ class VsixArtifactParserTest {
     }
 
     @Test
+    void parsesIconReferencedByPackageJson() throws Exception {
+        byte[] iconBytes = "not-really-a-png".getBytes();
+        Path vsix = Files.createTempFile("icon-sample", ".vsix");
+        try (ZipOutputStream out = new ZipOutputStream(Files.newOutputStream(vsix))) {
+            out.putNextEntry(new ZipEntry("extension.vsixmanifest"));
+            out.write(("""
+                    <PackageManifest>
+                      <Metadata>
+                        <Identity Id="artifact-id" Version="1.0.0" Publisher="example.publisher" />
+                      </Metadata>
+                    </PackageManifest>
+                    """).getBytes());
+            out.closeEntry();
+            out.putNextEntry(new ZipEntry("extension/package.json"));
+            out.write("""
+                    {
+                      "icon": "images/icon.png"
+                    }
+                    """.getBytes());
+            out.closeEntry();
+            out.putNextEntry(new ZipEntry("extension/images/icon.png"));
+            out.write(iconBytes);
+            out.closeEntry();
+        }
+
+        final AtomicReference<ArtifactMetadata> metadataRef = new AtomicReference<>();
+        try (InputStream input = Files.newInputStream(vsix)) {
+            parser.parse(new ArtifactInputDescriptor(
+                    vsix, ArtifactSourceType.LOCAL,
+                    vsix.toString(),
+                    vsix.getFileName().toString(),
+                    "vsix",
+                    "application/zip"), new IArtifactParseContext() {
+                @Override
+                public void writeArtifact(ArtifactInputDescriptor descriptor, ArtifactMetadata artifact) {
+                    metadataRef.set(artifact);
+                }
+            });
+        }
+
+        ArtifactMetadata metadata = metadataRef.get();
+        assertThat(metadata.getIconFileName()).isEqualTo("icon.png");
+        assertThat(metadata.getIconData()).isEqualTo(java.util.Base64.getEncoder().encodeToString(iconBytes));
+    }
+
+    @Test
+    void leavesIconNullWhenNotDeclared() throws Exception {
+        Path vsix = Files.createTempFile("no-icon-sample", ".vsix");
+        try (ZipOutputStream out = new ZipOutputStream(Files.newOutputStream(vsix))) {
+            out.putNextEntry(new ZipEntry("extension.vsixmanifest"));
+            out.write(("""
+                    <PackageManifest>
+                      <Metadata>
+                        <Identity Id="artifact-id" Version="1.0.0" Publisher="example.publisher" />
+                      </Metadata>
+                    </PackageManifest>
+                    """).getBytes());
+            out.closeEntry();
+        }
+
+        final AtomicReference<ArtifactMetadata> metadataRef = new AtomicReference<>();
+        try (InputStream input = Files.newInputStream(vsix)) {
+            parser.parse(new ArtifactInputDescriptor(
+                    vsix, ArtifactSourceType.LOCAL,
+                    vsix.toString(),
+                    vsix.getFileName().toString(),
+                    "vsix",
+                    "application/zip"), new IArtifactParseContext() {
+                @Override
+                public void writeArtifact(ArtifactInputDescriptor descriptor, ArtifactMetadata artifact) {
+                    metadataRef.set(artifact);
+                }
+            });
+        }
+
+        ArtifactMetadata metadata = metadataRef.get();
+        assertThat(metadata.getIconData()).isNull();
+        assertThat(metadata.getIconFileName()).isNull();
+    }
+
+    @Test
     void leavesReadmeNullWhenNotPackaged() throws Exception {
         Path vsix = Files.createTempFile("no-readme-sample", ".vsix");
         try (ZipOutputStream out = new ZipOutputStream(Files.newOutputStream(vsix))) {

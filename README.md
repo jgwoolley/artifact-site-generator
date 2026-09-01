@@ -122,15 +122,18 @@ Each catalog record (`ArtifactMetadata`) includes:
 - `downloadUrl`, `fileName`, `fileSizeBytes`, `sha256`
 - `pluginId` (which parser produced this record)
 - `readme` (raw README markdown discovered inside the artifact, if any - see below)
+- `iconData`, `iconFileName` (per-artifact icon override, if any - see [Parser icons](#parser-icons))
 
 Parser-specific metadata sources:
 
 - **Maven**: reads `name`, `description`, `developers`, and `scm` from the embedded
   `META-INF/maven/<group>/<artifact>/pom.xml`.
-- **VSIX**: reads `displayName`, `description`, `author`, `contributors`, and `repository` from the packaged
-  `package.json`, with manifest fallbacks for display name, description, and source URL. Also discovers a
-  packaged `readme.md` (case-insensitive; when more than one exists, the one closest to the extension's
-  `extension/` root wins).
+- **VSIX**: reads `displayName`, `description`, `author`, `contributors`, `repository`, and `icon` from the
+  packaged `package.json`, with manifest fallbacks for display name, description, and source URL. Also
+  discovers a packaged `readme.md` (case-insensitive; when more than one exists, the one closest to the
+  extension's `extension/` root wins) and, when `package.json` declares an `icon` (e.g. `"icon.png"` or
+  `"images/icon.png"`, resolved relative to `package.json`'s own directory inside the package), the referenced
+  image as this artifact's icon.
 
 ### README rendering
 
@@ -174,7 +177,16 @@ Every `ArtifactParser` must declare a default icon via `iconResourceName()` (e.g
 name of a classpath resource placed alongside the parser implementation class - its standard location (e.g.
 `com/nf3t/artifactsite/plugin/maven/icon.svg` next to `MavenArtifactParser`). `openIconStream()` (default
 method) loads it through the parser class's own classloader, so plugin-supplied icons work the same way inside
-PF4J's isolated plugin classloaders.
+PF4J's isolated plugin classloaders. This is the fallback icon shown for any artifact whose parser doesn't
+supply a more specific one.
+
+A parser can also override that default on a **per-artifact** basis by populating
+`ArtifactMetadata.iconData` (base64-encoded icon bytes) and `iconFileName` (the icon's original file name, used
+to derive its extension) from its own `parse()` implementation - no plugin API changes are needed, since these
+are plain `ArtifactMetadata` fields any parser can set. The VSIX parser is the first to do this: it reads the
+icon referenced by the packaged `package.json`'s `icon` field. `generate` writes each artifact's own icon (when
+present) to `assets/icons/artifacts/<parser-type>/<group-id>.<artifact-id>/<version>.<ext>` and uses it in
+place of the parser's default icon on that artifact's cards and detail page.
 
 `parse` caches each loaded parser's icon into the icons cache directory (above), named `<parser id>.<ext>`
 (e.g. `maven.svg`, `vsix.svg`), so `generate` can render icons without needing plugins loaded. `generate`
@@ -221,6 +233,8 @@ Rendered from FreeMarker templates in `artifact-site-cli/src/main/resources/temp
   local build with neither set); linked from the "Build Info" link in the header on every page
 - `assets/styles.css`, `assets/app.js`, `assets/logo.svg`
 - `assets/icons/<pluginId>.<ext>` - each parser plugin's default icon, copied from the icons cache
+- `assets/icons/artifacts/<parser-type>/<group-id>.<artifact-id>/<version>.<ext>` - per-artifact icon
+  overrides (see [Parser icons](#parser-icons)), written only for artifacts whose parser supplied one
 - `search-index.json` - powers the header search box's live results dropdown (vanilla JS, no runtime CSS
   framework)
 - `downloads/...` - copies of locally-sourced artifacts only

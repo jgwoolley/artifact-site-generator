@@ -5,6 +5,7 @@ import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
@@ -113,6 +114,12 @@ public class VsixArtifactParser implements ArtifactParser {
             metadata.setPluginId(id());
             metadata.setScmUrl(sourceUrl);
             metadata.setReadme(readReadme(content));
+
+            byte[] iconBytes = readIcon(content, packageMetadata.packageJsonDir(), packageMetadata.iconPath());
+            if (iconBytes != null && iconBytes.length > 0) {
+                metadata.setIconData(Base64.getEncoder().encodeToString(iconBytes));
+                metadata.setIconFileName(iconFileNameFrom(packageMetadata.iconPath()));
+            }
     	}
     	
     	String sha256 = PathUtils.sha256(descriptor.contentPath());
@@ -134,16 +141,77 @@ public class VsixArtifactParser implements ArtifactParser {
                     continue;
                 }
                 JsonNode packageJson = OBJECT_MAPPER.readTree(zipInput);
+                String entryName = entry.getName();
+                int lastSlash = entryName.lastIndexOf('/');
+                String packageJsonDir = lastSlash >= 0 ? entryName.substring(0, lastSlash + 1) : "";
                 return new PackageMetadata(
                         readJsonText(packageJson, "displayName"),
                         readJsonText(packageJson, "description"),
                         readAuthors(packageJson),
-                        readRepositoryUrl(packageJson));
+                        readRepositoryUrl(packageJson),
+                        packageJsonDir,
+                        readJsonText(packageJson, "icon"));
             }
         } catch (Exception ignored) {
             // Manifest metadata remains available when package.json cannot be read.
         }
-        return new PackageMetadata(null, null, List.of(), null);
+        return new PackageMetadata(null, null, List.of(), null, null, null);
+    }
+
+    /**
+     * Reads the bytes of the icon referenced by {@code package.json}'s {@code icon} field (e.g.
+     * {@code "icon.png"} or {@code "images/icon.png"}), resolved relative to the directory
+     * containing {@code package.json} within the packaged extension.
+     *
+     * @param content complete VSIX content
+     * @param packageJsonDir directory containing {@code package.json} within the VSIX (with a
+     *         trailing {@code /}, or empty when at the archive root), or {@code null} when
+     *         {@code package.json} was not found
+     * @param iconRelativePath {@code package.json}'s {@code icon} field value, or {@code null}
+     *         when the extension declares no icon
+     * @return icon bytes, or {@code null} when no icon is declared or it cannot be found
+     */
+    private byte @Nullable [] readIcon(
+            byte[] content, @Nullable String packageJsonDir, @Nullable String iconRelativePath) {
+        if (iconRelativePath == null || iconRelativePath.isBlank()) {
+            return null;
+        }
+
+        String normalizedRelative = iconRelativePath.replace('\\', '/');
+        while (normalizedRelative.startsWith("./")) {
+            normalizedRelative = normalizedRelative.substring(2);
+        }
+        String targetPath = (packageJsonDir == null ? "" : packageJsonDir) + normalizedRelative;
+
+        try (ZipInputStream zipInput = new ZipInputStream(new ByteArrayInputStream(content))) {
+            ZipEntry entry;
+            while ((entry = zipInput.getNextEntry()) != null) {
+                if (entry.isDirectory() || !entry.getName().equals(targetPath)) {
+                    continue;
+                }
+                return zipInput.readAllBytes();
+            }
+        } catch (Exception ignored) {
+            // The icon remains unavailable when it cannot be read; the parser's default icon is used instead.
+        }
+        return null;
+    }
+
+    /**
+     * Extracts the file's base name from an icon's relative path (e.g. {@code "images/icon.png"}
+     * becomes {@code "icon.png"}), used to derive the icon's file extension when it's written into
+     * the generated site.
+     *
+     * @param iconRelativePath {@code package.json}'s {@code icon} field value
+     * @return base file name, or {@code null} when {@code iconRelativePath} is {@code null}
+     */
+    private @Nullable String iconFileNameFrom(@Nullable String iconRelativePath) {
+        if (iconRelativePath == null) {
+            return null;
+        }
+        String normalized = iconRelativePath.replace('\\', '/');
+        int lastSlash = normalized.lastIndexOf('/');
+        return lastSlash >= 0 ? normalized.substring(lastSlash + 1) : normalized;
     }
 
     /**
@@ -337,6 +405,8 @@ public class VsixArtifactParser implements ArtifactParser {
             @Nullable String displayName,
             @Nullable String description,
             List<String> authors,
-            @Nullable String repositoryUrl) {
+            @Nullable String repositoryUrl,
+            @Nullable String packageJsonDir,
+            @Nullable String iconPath) {
     }
 }

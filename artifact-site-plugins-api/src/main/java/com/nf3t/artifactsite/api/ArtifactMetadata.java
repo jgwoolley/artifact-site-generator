@@ -27,6 +27,8 @@ public class ArtifactMetadata {
     private @Nullable String pluginId;
     private @Nullable String scmUrl;
     private @Nullable String readme;
+    private @Nullable String iconData;
+    private @Nullable String iconFileName;
 
     /** @return stable artifact identifier */
     public @Nullable String getId() { return id; }
@@ -133,6 +135,28 @@ public class ArtifactMetadata {
 
     /** @param readme raw README markdown discovered inside the artifact, if any */
     public void setReadme(@Nullable String readme) { this.readme = readme; }
+
+    /**
+     * @return base64-encoded bytes of an icon discovered inside this specific artifact, if any.
+     *         When present, this overrides the parser's default icon ({@link ArtifactParser
+     *         #iconResourceName()}) for this artifact's cards and detail page. Any parser may set
+     *         this from its own {@code parse()} implementation; the VSIX parser is the first to
+     *         do so, reading the icon referenced by the packaged {@code package.json}.
+     */
+    public @Nullable String getIconData() { return iconData; }
+
+    /** @param iconData base64-encoded bytes of an icon discovered inside this specific artifact */
+    public void setIconData(@Nullable String iconData) { this.iconData = iconData; }
+
+    /**
+     * @return original file name (or relative path) of {@link #getIconData()}, used to derive
+     *         the icon's file extension when writing it into the generated site; {@code null}
+     *         when {@link #getIconData()} is unset
+     */
+    public @Nullable String getIconFileName() { return iconFileName; }
+
+    /** @param iconFileName original file name (or relative path) of {@link #getIconData()} */
+    public void setIconFileName(@Nullable String iconFileName) { this.iconFileName = iconFileName; }
 
     public String getArtifactSlug() {
     	return getGroupId() + "." + getArtifactId();

@@ -12,6 +12,7 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -30,6 +31,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.nf3t.artifactsite.api.ArtifactMetadata;
+import com.nf3t.artifactsite.api.PathUtils;
 import com.nf3t.artifactsite.cli.ArtifactSiteGeneratorCli;
 
 import freemarker.template.Configuration;
@@ -223,7 +225,9 @@ public class GenerateCommand implements Runnable {
                 String detailUrl = toArtifactDetailUrl(parserSegment, artifactSegment, latestVersionSegment);
 
                 String parserIconUrl = parserIconUrls.getOrDefault(parserName, "");
-                Map<String, Object> latestCard = createArtifactCard(latest, parserDisplayName, detailUrl, parserIconUrl);
+                String latestIconUrl = resolveArtifactIconUrl(
+                        latest, parserIconUrl, outputRoot, parserSegment, artifactSegment, latestVersionSegment);
+                Map<String, Object> latestCard = createArtifactCard(latest, parserDisplayName, detailUrl, latestIconUrl);
                 latestArtifacts.add(latestCard);
                 allLatestArtifactCards.add(latestCard);
                 searchEntries.add(createSearchEntry(latestCard));
@@ -239,6 +243,8 @@ public class GenerateCommand implements Runnable {
                     String versionSegment = toPathSegment(versionValue);
                     String versionUrl = toArtifactDetailUrl(parserSegment, artifactSegment, versionSegment);
                     String downloadUrl = resolveDownloadUrl(version, outputRoot);
+                    String versionIconUrl = resolveArtifactIconUrl(
+                            version, parserIconUrl, outputRoot, parserSegment, artifactSegment, versionSegment);
 
                     Map<String, Object> versionRow = new HashMap<>();
                     versionRow.put("version", versionValue);
@@ -266,7 +272,7 @@ public class GenerateCommand implements Runnable {
                     detailPage.put("fileSizeBytes", version.getFileSizeBytes());
                     detailPage.put("fileSizeHumanReadable", formatFileSize(version.getFileSizeBytes()));
                     detailPage.put("downloadUrl", downloadUrl);
-                    detailPage.put("pageIcon", parserIconUrl);
+                    detailPage.put("pageIcon", versionIconUrl);
                     detailPage.put("readmeHtml", renderMarkdown(version.getReadme()));
                     detailPage.put("installGuideHtml", renderInstallGuide(installGuideTemplate, version));
                     detailPage.put("tags", normalizeTags(version.getTags()));
@@ -493,6 +499,52 @@ public class GenerateCommand implements Runnable {
                 throw new IOException("Missing classpath resource " + classpathResource);
             }
             Files.copy(in, destination, StandardCopyOption.REPLACE_EXISTING);
+        }
+    }
+
+    /**
+     * Resolves the icon URL for a specific artifact version: a per-artifact icon (see
+     * {@link ArtifactMetadata#getIconData()}), written into the generated site if the parser that
+     * produced it discovered one, or the owning parser's default icon otherwise.
+     *
+     * @param artifact artifact version whose icon is being resolved
+     * @param parserIconUrl fallback icon URL for the artifact's parser
+     * @param outputRoot generated site output root
+     * @param parserSegment path segment for the artifact's parser
+     * @param artifactSegment path segment for the artifact
+     * @param versionSegment path segment for this specific version
+     * @return site-relative icon URL
+     */
+    private String resolveArtifactIconUrl(
+            ArtifactMetadata artifact,
+            String parserIconUrl,
+            Path outputRoot,
+            String parserSegment,
+            String artifactSegment,
+            String versionSegment) {
+        String iconData = artifact.getIconData();
+        if (isBlank(iconData)) {
+            return parserIconUrl;
+        }
+
+        try {
+            byte[] iconBytes = Base64.getDecoder().decode(iconData);
+            String extension = PathUtils.getExtension(Path.of(safe(artifact.getIconFileName())));
+            String fileName = versionSegment + "." + (isBlank(extension) ? "png" : extension);
+            Path destination = outputRoot
+                    .resolve("assets/icons/artifacts")
+                    .resolve(parserSegment)
+                    .resolve(artifactSegment)
+                    .resolve(fileName);
+            Files.createDirectories(Objects.requireNonNull(destination.getParent()));
+            Files.write(destination, iconBytes);
+            return "/assets/icons/artifacts/"
+                    + encodePathSegment(parserSegment) + "/"
+                    + encodePathSegment(artifactSegment) + "/"
+                    + encodePathSegment(fileName);
+        } catch (IOException | IllegalArgumentException e) {
+            LOGGER.warn("Could not write custom icon for artifact " + artifact.getId(), e);
+            return parserIconUrl;
         }
     }
 
