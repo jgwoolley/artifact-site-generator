@@ -105,6 +105,7 @@ Generated pages support light/dark mode via system preference.
 - Remote download cache: `${XDG_DATA_HOME:-~/.local/share}/artifact-site-generator/remote-cache`
 - Remote request config: `${XDG_DATA_HOME:-~/.local/share}/artifact-site-generator/remote-requests.json`
 - Parser icon cache: `${XDG_DATA_HOME:-~/.local/share}/artifact-site-generator/icons`
+- Parser display name cache: `${XDG_DATA_HOME:-~/.local/share}/artifact-site-generator/parser-display-names.json`
 - Generated static site: `./public` by default (override with `--output`)
 
 ## Data model
@@ -130,14 +131,26 @@ Parser-specific metadata sources:
 
 Defined in `artifact-site-plugins-api`:
 
-- `ArtifactParserPlugin` - PF4J extension point
-- `ArtifactParser` - `supports(ArtifactInputDescriptor)`, `parse(ArtifactInputDescriptor, InputStream, ArtifactParseContext)`,
-  `iconResourceName()`, `openIconStream()`
+- `ArtifactParserPlugin` - PF4J extension point: `pluginId()`, `parser()`
+- `ArtifactParser` - `id()`, `displayName()`, `supports(ArtifactInputDescriptor)`,
+  `parse(ArtifactInputDescriptor, InputStream, ArtifactParseContext)`, `iconResourceName()`, `openIconStream()`
 - `ArtifactInputDescriptor` - input type, file name, extension, content type hints
 - `IArtifactParseContext` - checksum utilities, safe temp workspace, metadata writer helpers
 
 Plugins decide artifact compatibility and produce normalized metadata only; they never write the catalog
 directly.
+
+Two different ids are in play, and they're not interchangeable:
+
+- `ArtifactParserPlugin.pluginId()` is PF4J's identifier for the plugin/module itself (used by `list-plugins`
+  and friends). It's independent of the parser it wraps.
+- `ArtifactParser.id()` is the parser's own stable identifier (e.g. `"maven"`, `"vsix"`) - this is what's
+  written into every artifact's `pluginId` catalog field, and what drives URL routing
+  (`/artifacts/<id>/...`) and grouping. A plugin could in principle expose a parser whose `id()` differs from
+  its `pluginId()`, though today each plugin wraps exactly one parser and the two happen to match.
+
+`ArtifactParser.displayName()` (e.g. `"Maven"`, `"VS Code Extension"`) is what's actually shown in the UI -
+parser cards, page headings, artifact card/detail "parser" labels, and search results - never `id()`.
 
 ### Parser icons
 
@@ -147,10 +160,17 @@ name of a classpath resource placed alongside the parser implementation class - 
 method) loads it through the parser class's own classloader, so plugin-supplied icons work the same way inside
 PF4J's isolated plugin classloaders.
 
-`parse` caches each loaded plugin's icon into the icons cache directory (above), named `<pluginId>.<ext>` (e.g.
-`maven.svg`, `vsix.svg`), so `generate` can render icons without needing plugins loaded. `generate` copies
-cached icons into `assets/icons/` in the generated site and renders them on parser cards, artifact cards, and
-artifact detail pages.
+`parse` caches each loaded parser's icon into the icons cache directory (above), named `<parser id>.<ext>`
+(e.g. `maven.svg`, `vsix.svg`), so `generate` can render icons without needing plugins loaded. `generate`
+copies cached icons into `assets/icons/` in the generated site and renders them on parser cards, artifact
+cards, and artifact detail pages.
+
+### Parser display names
+
+`parse` caches each loaded parser's `displayName()` into the parser display name cache (above) as a JSON
+object keyed by `ArtifactParser.id()`, merged with whatever names are already cached (so a parser that isn't
+currently installed keeps its last-known display name). `generate` reads that cache and falls back to the raw
+parser id for any parser it can't find a cached name for.
 
 ## Generated site layout
 

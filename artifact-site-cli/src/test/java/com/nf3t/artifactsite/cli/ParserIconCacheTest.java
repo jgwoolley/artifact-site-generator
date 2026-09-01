@@ -33,6 +33,16 @@ class ParserIconCacheTest {
     void incompatiblePluginDoesNotAbortIconCachingForOtherPlugins() throws Exception {
         ArtifactParserPlugin incompatiblePlugin = pluginWithParser("broken", new ArtifactParser() {
             @Override
+            public String id() {
+                return "broken";
+            }
+
+            @Override
+            public String displayName() {
+                return "Broken";
+            }
+
+            @Override
             public boolean supports(ArtifactInputDescriptor descriptor) {
                 return false;
             }
@@ -49,6 +59,16 @@ class ParserIconCacheTest {
         });
 
         ArtifactParserPlugin healthyPlugin = pluginWithParser("healthy", new ArtifactParser() {
+            @Override
+            public String id() {
+                return "healthy";
+            }
+
+            @Override
+            public String displayName() {
+                return "Healthy";
+            }
+
             @Override
             public boolean supports(ArtifactInputDescriptor descriptor) {
                 return false;

@@ -34,7 +34,20 @@ public class VsixArtifactParser implements ArtifactParser {
     private static final String SOURCE_LINK_PROPERTY = "Microsoft.VisualStudio.Services.Links.Source";
     private static final String PACKAGE_JSON_SUFFIX = "/package.json";
     private static final String ICON_RESOURCE_NAME = "icon.svg";
+    private static final String PARSER_ID = "vsix";
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+
+    /** {@inheritDoc} */
+    @Override
+    public String id() {
+        return PARSER_ID;
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public String displayName() {
+        return "VS Code Extension";
+    }
 
     /** {@inheritDoc} */
     @Override
@@ -88,8 +101,8 @@ public class VsixArtifactParser implements ArtifactParser {
             metadata.setAuthors(packageMetadata.authors());
             metadata.setId(groupId + ":" + artifactId + ":" + version);
             metadata.setFileSizeBytes(content.length);
-            metadata.setPluginId("vsix");
-            metadata.setScmUrl(sourceUrl);            
+            metadata.setPluginId(id());
+            metadata.setScmUrl(sourceUrl);
     	}
     	
     	String sha256 = PathUtils.sha256(descriptor.contentPath());

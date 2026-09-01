@@ -33,6 +33,7 @@ import freemarker.template.TemplateExceptionHandler;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 import picocli.CommandLine.ParentCommand;
+import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.ObjectMapper;
 
 /**
@@ -93,7 +94,8 @@ public class GenerateCommand implements Runnable {
         copyAsset("assets/logo.svg", outputRoot.resolve("assets/logo.svg"));
 
         Map<String, String> parserIconUrls = copyParserIcons(parentCommand.iconsDir(), outputRoot);
-        GenerationModel model = buildModel(artifactCatalog, outputRoot, parserIconUrls);
+        Map<String, String> parserDisplayNames = readParserDisplayNames(parentCommand.parserDisplayNamesPath());
+        GenerationModel model = buildModel(artifactCatalog, outputRoot, parserIconUrls, parserDisplayNames);
         writeSearchIndex(outputRoot.resolve("search-index.json"), model.searchIndexEntries());
 
         Configuration freemarker = createFreemarkerConfiguration();
@@ -102,10 +104,11 @@ public class GenerateCommand implements Runnable {
         for (ParserGroup parserGroup : model.parserGroups()) {
             Path parserIndexPath = outputRoot.resolve("artifacts").resolve(parserGroup.parserSegment()).resolve("index.html");
             Map<String, Object> parserData = new HashMap<>();
-            parserData.put("title", parserGroup.parserName() + " Artifacts");
-            parserData.put("pageHeading", parserGroup.parserName() + " Artifacts");
-            parserData.put("pageDescription", "Latest artifacts parsed by " + parserGroup.parserName());
+            parserData.put("title", parserGroup.parserDisplayName() + " Artifacts");
+            parserData.put("pageHeading", parserGroup.parserDisplayName() + " Artifacts");
+            parserData.put("pageDescription", "Latest artifacts parsed by " + parserGroup.parserDisplayName());
             parserData.put("rootPath", relativeRootPath(parserIndexPath, outputRoot));
+            parserData.put("pageIcon", parserIconUrls.getOrDefault(parserGroup.parserName(), ""));
             parserData.put("artifactCards", parserGroup.latestArtifacts());
             writeTemplate(freemarker, "index.ftl", parserIndexPath, parserData);
 
@@ -127,6 +130,7 @@ public class GenerateCommand implements Runnable {
                                 ? "All published versions for " + artifactName
                                 : latestDescription);
                 artifactData.put("rootPath", relativeRootPath(artifactIndexPath, outputRoot));
+                artifactData.put("pageIcon", latestDetailPage.get("pageIcon"));
                 artifactData.put("versions", artifactGroup.versionRows());
                 writeTemplate(freemarker, "index.ftl", artifactIndexPath, artifactData);
 
@@ -157,7 +161,10 @@ public class GenerateCommand implements Runnable {
     }
 
     private GenerationModel buildModel(
-            List<ArtifactMetadata> artifactCatalog, Path outputRoot, Map<String, String> parserIconUrls)
+            List<ArtifactMetadata> artifactCatalog,
+            Path outputRoot,
+            Map<String, String> parserIconUrls,
+            Map<String, String> parserDisplayNames)
             throws IOException {
         Map<String, Map<String, List<ArtifactMetadata>>> grouped = new LinkedHashMap<>();
 
@@ -184,6 +191,7 @@ public class GenerateCommand implements Runnable {
 
         for (String parserName : parserNames) {
             String parserSegment = toPathSegment(parserName);
+            String parserDisplayName = parserDisplayNames.getOrDefault(parserName, parserName);
             List<ArtifactGroup> artifactGroups = new ArrayList<>();
             List<Map<String, Object>> latestArtifacts = new ArrayList<>();
 
@@ -200,7 +208,7 @@ public class GenerateCommand implements Runnable {
                 String detailUrl = toArtifactDetailUrl(parserSegment, artifactSegment, latestVersionSegment);
 
                 String parserIconUrl = parserIconUrls.getOrDefault(parserName, "");
-                Map<String, Object> latestCard = createArtifactCard(latest, parserName, detailUrl, parserIconUrl);
+                Map<String, Object> latestCard = createArtifactCard(latest, parserDisplayName, detailUrl, parserIconUrl);
                 latestArtifacts.add(latestCard);
                 allLatestArtifactCards.add(latestCard);
                 searchEntries.add(createSearchEntry(latestCard));
@@ -230,7 +238,7 @@ public class GenerateCommand implements Runnable {
                     detailPage.put("artifactKey", artifactKey);
                     detailPage.put("version", versionValue);
                     detailPage.put("versionSegment", versionSegment);
-                    detailPage.put("parserType", parserName);
+                    detailPage.put("parserType", parserDisplayName);
                     detailPage.put("groupId", safe(version.getGroupId()));
                     detailPage.put("artifactId", safe(version.getArtifactId()));
                     detailPage.put("description", safe(version.getDescription()));
@@ -243,7 +251,7 @@ public class GenerateCommand implements Runnable {
                     detailPage.put("fileSizeBytes", version.getFileSizeBytes());
                     detailPage.put("fileSizeHumanReadable", formatFileSize(version.getFileSizeBytes()));
                     detailPage.put("downloadUrl", downloadUrl);
-                    detailPage.put("icon", parserIconUrl);
+                    detailPage.put("pageIcon", parserIconUrl);
                     detailPage.put("tags", normalizeTags(version.getTags()));
                     detailPage.put("authors", normalizeTags(version.getAuthors()));
                     detailPages.add(detailPage);
@@ -252,7 +260,7 @@ public class GenerateCommand implements Runnable {
                 artifactGroups.add(new ArtifactGroup(artifactKey, artifactSegment, versionRows, detailPages));
             }
 
-            parserGroups.add(new ParserGroup(parserName, parserSegment, latestArtifacts, artifactGroups));
+            parserGroups.add(new ParserGroup(parserName, parserDisplayName, parserSegment, latestArtifacts, artifactGroups));
         }
 
         allLatestArtifactCards.sort(
@@ -269,7 +277,7 @@ public class GenerateCommand implements Runnable {
         List<Map<String, Object>> parserSummaries = new ArrayList<>();
         for (ParserGroup parserGroup : model.parserGroups()) {
             Map<String, Object> parserSummary = new HashMap<>();
-            parserSummary.put("parserName", parserGroup.parserName());
+            parserSummary.put("parserName", parserGroup.parserDisplayName());
             parserSummary.put("artifactCount", parserGroup.latestArtifacts().size());
             parserSummary.put("url", "/artifacts/" + parserGroup.parserSegment() + "/index.html");
             parserSummary.put("icon", parserIconUrls.getOrDefault(parserGroup.parserName(), ""));
@@ -353,6 +361,29 @@ public class GenerateCommand implements Runnable {
             }
         }
         return parserIconUrls;
+    }
+
+    /**
+     * Reads the cached parser plugin id -> UI display name map (see {@code
+     * ParserDisplayNameCache}), populated by {@code parse}. Falls back to an empty map when the
+     * cache is missing or unreadable, so callers should fall back to the raw plugin id per entry.
+     *
+     * @param cachePath parser display name cache file populated by {@code parse}
+     * @return display name by parser plugin id
+     */
+    private Map<String, String> readParserDisplayNames(Path cachePath) {
+        if (!Files.isRegularFile(cachePath)) {
+            return Map.of();
+        }
+        try (InputStream input = Files.newInputStream(cachePath)) {
+            Map<String, String> displayNames =
+                    OBJECT_MAPPER.readValue(input, new TypeReference<Map<String, String>>() {
+                    });
+            return displayNames == null ? Map.of() : displayNames;
+        } catch (IOException e) {
+            LOGGER.warn("Failed to read parser display name cache at " + cachePath, e);
+            return Map.of();
+        }
     }
 
     private void copyAsset(String classpathResource, Path destination) throws IOException {
@@ -442,6 +473,7 @@ public class GenerateCommand implements Runnable {
         entry.put("parserType", card.get("parserType"));
         entry.put("groupId", card.get("groupId"));
         entry.put("artifactId", card.get("artifactId"));
+        entry.put("icon", card.get("icon"));
         return entry;
     }
 
@@ -543,6 +575,7 @@ public class GenerateCommand implements Runnable {
 
     private record ParserGroup(
             String parserName,
+            String parserDisplayName,
             String parserSegment,
             List<Map<String, Object>> latestArtifacts,
             List<ArtifactGroup> artifactGroups) {

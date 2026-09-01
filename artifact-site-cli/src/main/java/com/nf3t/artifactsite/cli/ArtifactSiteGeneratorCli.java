@@ -113,6 +113,15 @@ public class ArtifactSiteGeneratorCli implements Runnable {
         return XdgPaths.iconsDir();
     }
 
+    /**
+     * Returns the path of the cached JSON map of parser plugin id to UI display name.
+     *
+     * @return parser display name cache file path
+     */
+    public Path parserDisplayNamesPath() {
+        return XdgPaths.parserDisplayNamesPath();
+    }
+
     public ArtifactsByParser loadArtifacts() {
         Path artifactJsonPath = artifactJsonPath();
         List<ArtifactMetadata> artifactList = new ArrayList<>(1);

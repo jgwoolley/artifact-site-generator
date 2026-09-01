@@ -14,8 +14,8 @@ import com.nf3t.artifactsite.api.ArtifactParserPlugin;
 import com.nf3t.artifactsite.api.PathUtils;
 
 /**
- * Persists each parser plugin's default icon to a stable cache directory so the
- * static site can be generated without the plugins being loaded at generation time.
+ * Persists each parser's default icon to a stable cache directory so the static site can be
+ * generated without the plugins being loaded at generation time.
  */
 public final class ParserIconCache {
 
@@ -23,9 +23,10 @@ public final class ParserIconCache {
     }
 
     /**
-     * Copies each plugin's declared default icon into {@code iconsDir}, named after the
-     * plugin id (e.g. {@code maven.svg}). Icons are read via the parser's own classloader,
-     * per {@link ArtifactParser#openIconStream()}.
+     * Copies each parser's declared default icon into {@code iconsDir}, named after the
+     * parser's own id (e.g. {@code maven.svg}), per {@link ArtifactParser#id()} - not the
+     * wrapping {@link ArtifactParserPlugin#pluginId()}. Icons are read via the parser's own
+     * classloader, per {@link ArtifactParser#openIconStream()}.
      *
      * <p>A single plugin's icon can never abort the whole {@code parse} run: a plugin JAR built
      * against an older {@code artifact-site-plugins-api} can be binary-incompatible with the
@@ -39,7 +40,7 @@ public final class ParserIconCache {
     public static void refresh(List<ArtifactParserPlugin> plugins, Path iconsDir, Logger logger) {
         for (ArtifactParserPlugin plugin : plugins) {
             try {
-                refreshOne(plugin, iconsDir, logger);
+                refreshOne(plugin.parser(), iconsDir, logger);
             } catch (Throwable e) {
                 logger.warn("Could not load icon for parser plugin '" + plugin.pluginId()
                         + "' (it may need to be rebuilt against the current plugin API)", e);
@@ -47,25 +48,25 @@ public final class ParserIconCache {
         }
     }
 
-    private static void refreshOne(ArtifactParserPlugin plugin, Path iconsDir, Logger logger) throws IOException {
-        ArtifactParser parser = plugin.parser();
+    private static void refreshOne(ArtifactParser parser, Path iconsDir, Logger logger) throws IOException {
+        String parserId = parser.id();
         String resourceName = parser.iconResourceName();
         if (resourceName == null || resourceName.isBlank()) {
-            logger.warn("Parser plugin '{}' does not declare an icon resource name.", plugin.pluginId());
+            logger.warn("Parser '{}' does not declare an icon resource name.", parserId);
             return;
         }
 
         try (InputStream iconStream = parser.openIconStream()) {
             if (iconStream == null) {
                 logger.warn(
-                        "Parser plugin '{}' declares icon resource '{}' but it could not be found.",
-                        plugin.pluginId(),
+                        "Parser '{}' declares icon resource '{}' but it could not be found.",
+                        parserId,
                         resourceName);
                 return;
             }
 
             String extension = PathUtils.getExtension(Path.of(resourceName));
-            String fileName = plugin.pluginId() + (extension == null || extension.isBlank() ? "" : "." + extension);
+            String fileName = parserId + (extension == null || extension.isBlank() ? "" : "." + extension);
             Files.createDirectories(iconsDir);
             Files.copy(iconStream, iconsDir.resolve(fileName), StandardCopyOption.REPLACE_EXISTING);
         }

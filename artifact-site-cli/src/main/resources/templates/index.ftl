@@ -1,14 +1,16 @@
 <#import "layout.ftl" as layout>
-<@layout.page title=title rootPath=rootPath pageHeading=pageHeading pageDescription=pageDescription>
+<@layout.page title=title rootPath=rootPath pageHeading=pageHeading pageDescription=pageDescription pageIcon=pageIcon!"">
   <#if parserSummaries?? && parserSummaries?size gt 0>
     <section>
       <h2>Parsers</h2>
       <div class="grid parser-grid">
         <#list parserSummaries as parser>
           <a class="card parser-card" href="${rootPath}${parser.url?remove_beginning('/')}">
-            <#if parser.icon?has_content><img class="card-icon" src="${rootPath}${parser.icon?remove_beginning('/')}" alt="" width="24" height="24"></#if>
-            <strong>${parser.parserName?html}</strong>
-            <span>${parser.artifactCount} artifact(s)</span>
+            <#if parser.icon?has_content><img class="card-icon" src="${rootPath}${parser.icon?remove_beginning('/')}" alt="" width="56" height="56"></#if>
+            <div class="card-body">
+              <strong>${parser.parserName?html}</strong>
+              <span class="meta">${parser.artifactCount} artifact(s)</span>
+            </div>
           </a>
         </#list>
       </div>
@@ -18,19 +20,19 @@
   <#if artifactCards?? && artifactCards?size gt 0>
     <section>
       <h2>Latest Artifacts</h2>
-      <div class="grid artifact-grid" data-search-target="cards">
+      <div class="grid artifact-grid">
         <#list artifactCards as artifact>
-          <article class="card artifact-card" data-entry-url="${artifact.url}">
-            <h3>
-              <#if artifact.icon?has_content><img class="card-icon" src="${rootPath}${artifact.icon?remove_beginning('/')}" alt="" width="20" height="20"></#if>
-              <a href="${rootPath}${artifact.url?remove_beginning('/')}">${artifact.name?html}</a>
-            </h3>
-            <p class="meta">${artifact.groupId?html}.${artifact.artifactId?html} • ${artifact.version?html} • ${artifact.parserType?html}</p>
-            <p>${artifact.description?html}</p>
-            <div class="tags">
-              <#list artifact.tags as tag><span class="tag">${tag?html}</span></#list>
+          <a class="card artifact-card" href="${rootPath}${artifact.url?remove_beginning('/')}">
+            <#if artifact.icon?has_content><img class="card-icon" src="${rootPath}${artifact.icon?remove_beginning('/')}" alt="" width="56" height="56"></#if>
+            <div class="card-body">
+              <h3>${artifact.name?html}</h3>
+              <p class="meta">${artifact.groupId?html}.${artifact.artifactId?html} • ${artifact.version?html} • ${artifact.parserType?html}</p>
+              <p class="card-description">${artifact.description?html}</p>
+              <div class="tags">
+                <#list artifact.tags as tag><span class="tag">${tag?html}</span></#list>
+              </div>
             </div>
-          </article>
+          </a>
         </#list>
       </div>
     </section>

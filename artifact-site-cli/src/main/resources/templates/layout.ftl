@@ -1,4 +1,4 @@
-<#macro page title rootPath pageHeading pageDescription>
+<#macro page title rootPath pageHeading pageDescription pageIcon="">
 <!doctype html>
 <html lang="en">
 <head>
@@ -20,10 +20,26 @@
       <img src="${rootPath}assets/logo.svg" alt="Artifact Site" width="28" height="28">
       <span>Artifact Registry</span>
     </a>
-    <input id="site-search" class="search-input" type="search" placeholder="Search artifacts, tags, parser..." aria-label="Search artifacts">
+    <div class="search-wrap">
+      <input
+        id="site-search"
+        class="search-input"
+        type="search"
+        placeholder="Search artifacts, tags, parser..."
+        aria-label="Search artifacts"
+        autocomplete="off"
+        role="combobox"
+        aria-expanded="false"
+        aria-controls="search-results"
+        aria-autocomplete="list">
+      <div id="search-results" class="search-results" role="listbox" hidden></div>
+    </div>
   </header>
   <main class="container">
-    <h1>${pageHeading?html}</h1>
+    <div class="page-heading">
+      <#if pageIcon?has_content><img class="page-icon" src="${rootPath}${pageIcon?remove_beginning('/')}" alt="" width="56" height="56"></#if>
+      <h1>${pageHeading?html}</h1>
+    </div>
     <#if pageDescription?has_content>
       <p class="lead">${pageDescription?html}</p>
     </#if>

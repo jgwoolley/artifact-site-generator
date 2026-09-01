@@ -9,6 +9,24 @@ import org.jspecify.annotations.Nullable;
  */
 public interface ArtifactParser {
     /**
+     * Returns the stable identifier for this parser, used for artifact storage, URL routing,
+     * and grouping (e.g. {@code "maven"}). Written into every artifact this parser produces via
+     * {@link ArtifactMetadata#setPluginId(String)}. This value is never shown to users; see
+     * {@link #displayName()} for the UI-facing label.
+     *
+     * @return parser identifier
+     */
+    public String id();
+
+    /**
+     * Returns the human-readable name shown in the UI for this parser (e.g. {@code "Maven"}),
+     * distinct from the stable {@link #id()}.
+     *
+     * @return display name
+     */
+    public String displayName();
+
+    /**
      * Determines whether this parser can parse a given input.
      *
      * @param descriptor candidate input descriptor, may be {@code null}

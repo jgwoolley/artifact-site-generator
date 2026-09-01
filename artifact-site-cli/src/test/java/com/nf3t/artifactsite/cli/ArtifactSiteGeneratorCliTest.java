@@ -59,6 +59,16 @@ class ArtifactSiteGeneratorCliTest {
         ArtifactSiteGeneratorCli cli = new ArtifactSiteGeneratorCli();
         ArtifactParser parser = new ArtifactParser() {
             @Override
+            public String id() {
+                return "test";
+            }
+
+            @Override
+            public String displayName() {
+                return "Test";
+            }
+
+            @Override
             public boolean supports(com.nf3t.artifactsite.api.ArtifactInputDescriptor descriptor) {
                 return false;
             }
@@ -107,6 +117,16 @@ class ArtifactSiteGeneratorCliTest {
             @Override
             public ArtifactParser parser() {
                 return new ArtifactParser() {
+                    @Override
+                    public String id() {
+                        return "test";
+                    }
+
+                    @Override
+                    public String displayName() {
+                        return "Test";
+                    }
+
                     @Override
                     public boolean supports(com.nf3t.artifactsite.api.ArtifactInputDescriptor descriptor) {
                         return false;

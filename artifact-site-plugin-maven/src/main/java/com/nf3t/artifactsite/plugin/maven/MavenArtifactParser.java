@@ -34,6 +34,19 @@ public class MavenArtifactParser implements ArtifactParser {
     private static final String POM_PROPERTIES_SUFFIX = "/pom.properties";
     private static final String MAVEN_METADATA_PREFIX = "META-INF/maven/";
     private static final String ICON_RESOURCE_NAME = "icon.svg";
+    private static final String PARSER_ID = "maven";
+
+    /** {@inheritDoc} */
+    @Override
+    public String id() {
+        return PARSER_ID;
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public String displayName() {
+        return "Maven";
+    }
 
     /** {@inheritDoc} */
     @Override
@@ -73,8 +86,8 @@ public class MavenArtifactParser implements ArtifactParser {
             metadata.setAuthors(pom.authors());
             metadata.setArtifactName(firstNonBlank(pom.name(), selected.artifactName(), selected.artifactId()));
             metadata.setFileSizeBytes(content.length);
-            metadata.setPluginId("maven");
-            metadata.setScmUrl(readScmUrl(content, selected.path()).orElse(null));          
+            metadata.setPluginId(id());
+            metadata.setScmUrl(readScmUrl(content, selected.path()).orElse(null));
     	}   
     	
     	String sha256 = PathUtils.sha256(descriptor.contentPath());
