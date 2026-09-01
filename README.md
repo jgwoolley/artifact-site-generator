@@ -214,8 +214,7 @@ Rendered from FreeMarker templates in `artifact-site-cli/src/main/resources/temp
 - `artifacts/<parser-type>/<group-id>.<artifact-id>/index.html` - lists all versions of an artifact, latest first
 - `artifacts/<parser-type>/<group-id>.<artifact-id>/<version>/index.html` - artifact detail page: rendered
   README as the main content (or a "no README" note) alongside a sidebar with Resources/Details/Tags cards,
-  loosely modeled on Open VSX's extension page. Resources includes a "How to Install" popup when the parser
-  declares an install guide.
+  loosely modeled on Open VSX's extension page
 - `tags/<tag>/index.html` - tag-filtered listing
 - `assets/styles.css`, `assets/app.js`, `assets/logo.svg`
 - `assets/icons/<pluginId>.<ext>` - each parser plugin's default icon, copied from the icons cache
