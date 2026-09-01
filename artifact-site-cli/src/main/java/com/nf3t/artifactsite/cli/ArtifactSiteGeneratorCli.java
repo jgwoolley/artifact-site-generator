@@ -122,6 +122,15 @@ public class ArtifactSiteGeneratorCli implements Runnable {
         return XdgPaths.parserDisplayNamesPath();
     }
 
+    /**
+     * Returns the path of the cached JSON map of parser id to install guide HTML template.
+     *
+     * @return parser install guide cache file path
+     */
+    public Path parserInstallGuidesPath() {
+        return XdgPaths.parserInstallGuidesPath();
+    }
+
     public ArtifactsByParser loadArtifacts() {
         Path artifactJsonPath = artifactJsonPath();
         List<ArtifactMetadata> artifactList = new ArrayList<>(1);

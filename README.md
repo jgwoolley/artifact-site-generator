@@ -107,6 +107,7 @@ Generated pages support light/dark mode via system preference.
 - Remote request config: `${XDG_DATA_HOME:-~/.local/share}/artifact-site-generator/remote-requests.json`
 - Parser icon cache: `${XDG_DATA_HOME:-~/.local/share}/artifact-site-generator/icons`
 - Parser display name cache: `${XDG_DATA_HOME:-~/.local/share}/artifact-site-generator/parser-display-names.json`
+- Parser install guide cache: `${XDG_DATA_HOME:-~/.local/share}/artifact-site-generator/parser-install-guides.json`
 - Generated static site: `./public` by default (override with `--output`)
 
 ## Data model
@@ -147,7 +148,8 @@ Defined in `artifact-site-plugins-api`:
 
 - `ArtifactParserPlugin` - PF4J extension point: `pluginId()`, `parser()`
 - `ArtifactParser` - `id()`, `displayName()`, `supports(ArtifactInputDescriptor)`,
-  `parse(ArtifactInputDescriptor, InputStream, ArtifactParseContext)`, `iconResourceName()`, `openIconStream()`
+  `parse(ArtifactInputDescriptor, InputStream, ArtifactParseContext)`, `iconResourceName()`, `openIconStream()`,
+  `installGuideResourceName()` (optional), `openInstallGuideStream()`
 - `ArtifactInputDescriptor` - input type, file name, extension, content type hints
 - `IArtifactParseContext` - checksum utilities, safe temp workspace, metadata writer helpers
 
@@ -186,6 +188,22 @@ object keyed by `ArtifactParser.id()`, merged with whatever names are already ca
 currently installed keeps its last-known display name). `generate` reads that cache and falls back to the raw
 parser id for any parser it can't find a cached name for.
 
+### Parser install guides
+
+A parser can optionally declare an install guide via `installGuideResourceName()` (e.g. `"install.html"`, next
+to `MavenArtifactParser`/`VsixArtifactParser`) - an HTML fragment shown to users in a "How to Install" popup on
+the artifact detail page. Unlike a README, the fragment is trusted, parser-author-controlled markup and is
+emitted as-is (not escaped), so it can freely use `<pre>`/`<code>` and other markup styled by the site's own
+CSS (`.install-guide` shares its typography rules with `.readme`). It may reference `{{groupId}}`,
+`{{artifactId}}`, and `{{version}}` placeholders; `generate` substitutes those with the specific artifact's own
+(HTML-escaped) values.
+
+`parse` caches each loaded parser's install guide template into the parser install guide cache (above) as a
+JSON object keyed by `ArtifactParser.id()`; a parser that declares no guide has any previously cached entry
+removed (a deliberate opt-out), while a parser that simply isn't loaded this run keeps its last-known guide.
+Code blocks (`<pre>`) in the rendered popup get a "Copy" button (`assets/app.js`), using the Clipboard API with
+a `document.execCommand('copy')` fallback for non-secure contexts.
+
 ## Generated site layout
 
 Rendered from FreeMarker templates in `artifact-site-cli/src/main/resources/templates`
@@ -196,7 +214,8 @@ Rendered from FreeMarker templates in `artifact-site-cli/src/main/resources/temp
 - `artifacts/<parser-type>/<group-id>.<artifact-id>/index.html` - lists all versions of an artifact, latest first
 - `artifacts/<parser-type>/<group-id>.<artifact-id>/<version>/index.html` - artifact detail page: rendered
   README as the main content (or a "no README" note) alongside a sidebar with Resources/Details/Tags cards,
-  loosely modeled on Open VSX's extension page
+  loosely modeled on Open VSX's extension page. Resources includes a "How to Install" popup when the parser
+  declares an install guide.
 - `tags/<tag>/index.html` - tag-filtered listing
 - `assets/styles.css`, `assets/app.js`, `assets/logo.svg`
 - `assets/icons/<pluginId>.<ext>` - each parser plugin's default icon, copied from the icons cache

@@ -13,6 +13,7 @@ import com.nf3t.artifactsite.cli.ArtifactSiteGeneratorCli;
 import com.nf3t.artifactsite.cli.ArtifactsByParser;
 import com.nf3t.artifactsite.cli.ParserDisplayNameCache;
 import com.nf3t.artifactsite.cli.ParserIconCache;
+import com.nf3t.artifactsite.cli.ParserInstallGuideCache;
 import com.nf3t.artifactsite.cli.RemoteRequestConfigStore;
 import com.nf3t.artifactsite.cli.RemoteTlsConfig;
 
@@ -64,6 +65,7 @@ public class ParseCommand implements Runnable {
         LOGGER.info("Loaded {} parser plugin(s).", plugins.size());
         ParserIconCache.refresh(plugins, parentCommand.iconsDir(), LOGGER);
         ParserDisplayNameCache.refresh(plugins, parentCommand.parserDisplayNamesPath(), LOGGER);
+        ParserInstallGuideCache.refresh(plugins, parentCommand.parserInstallGuidesPath(), LOGGER);
 
         ArtifactsByParser artifacts = parentCommand.loadArtifacts();
         RemoteRequestConfigStore remoteRequestConfigStore = parentCommand.loadRemoteRequestConfigStore();

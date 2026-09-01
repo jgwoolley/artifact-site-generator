@@ -347,12 +347,20 @@ th, td {
   gap: 0.55rem;
 }
 
-.resource-list a {
+.resource-list a,
+.resource-list button {
   color: var(--accent);
   text-decoration: none;
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
 }
 
-.resource-list a:hover {
+.resource-list a:hover,
+.resource-list button:hover {
   text-decoration: underline;
 }
 
@@ -391,46 +399,48 @@ th, td {
   overflow-wrap: anywhere;
 }
 
-.readme > :first-child {
+.readme > :first-child, .install-guide > :first-child {
   margin-top: 0;
 }
 
-.readme > :last-child {
+.readme > :last-child, .install-guide > :last-child {
   margin-bottom: 0;
 }
 
-.readme h1, .readme h2, .readme h3, .readme h4, .readme h5, .readme h6 {
+.readme h1, .readme h2, .readme h3, .readme h4, .readme h5, .readme h6,
+.install-guide h1, .install-guide h2, .install-guide h3, .install-guide h4, .install-guide h5, .install-guide h6 {
   margin: 1.4em 0 0.6em;
   line-height: 1.3;
 }
 
-.readme h1 { font-size: 1.5rem; border-bottom: 1px solid var(--line); padding-bottom: 0.4rem; }
-.readme h2 { font-size: 1.25rem; border-bottom: 1px solid var(--line); padding-bottom: 0.35rem; }
-.readme h3 { font-size: 1.1rem; }
-.readme h4 { font-size: 1rem; }
+.readme h1, .install-guide h1 { font-size: 1.5rem; border-bottom: 1px solid var(--line); padding-bottom: 0.4rem; }
+.readme h2, .install-guide h2 { font-size: 1.25rem; border-bottom: 1px solid var(--line); padding-bottom: 0.35rem; }
+.readme h3, .install-guide h3 { font-size: 1.1rem; }
+.readme h4, .install-guide h4 { font-size: 1rem; }
 
-.readme p, .readme ul, .readme ol, .readme blockquote, .readme pre, .readme table {
+.readme p, .readme ul, .readme ol, .readme blockquote, .readme pre, .readme table,
+.install-guide p, .install-guide ul, .install-guide ol, .install-guide blockquote, .install-guide pre, .install-guide table {
   margin: 0.8em 0;
 }
 
-.readme ul, .readme ol {
+.readme ul, .readme ol, .install-guide ul, .install-guide ol {
   padding-left: 1.5em;
 }
 
-.readme li + li {
+.readme li + li, .install-guide li + li {
   margin-top: 0.25em;
 }
 
-.readme img {
+.readme img, .install-guide img {
   max-width: 100%;
   height: auto;
 }
 
-.readme a {
+.readme a, .install-guide a {
   color: var(--accent);
 }
 
-.readme code {
+.readme code, .install-guide code {
   background: var(--tag-bg);
   border-radius: 4px;
   padding: 0.15em 0.4em;
@@ -438,41 +448,111 @@ th, td {
   font-size: 0.88em;
 }
 
-.readme pre {
+.readme pre, .install-guide pre {
   background: var(--tag-bg);
   border-radius: 8px;
   padding: 1em;
   overflow-x: auto;
+  position: relative;
 }
 
-.readme pre code {
+.readme pre code, .install-guide pre code {
   background: none;
   padding: 0;
   font-size: 0.85em;
 }
 
-.readme blockquote {
+.readme blockquote, .install-guide blockquote {
   margin-left: 0;
   padding-left: 1em;
   border-left: 3px solid var(--line);
   color: var(--muted);
 }
 
-.readme hr {
+.readme hr, .install-guide hr {
   border: none;
   border-top: 1px solid var(--line);
   margin: 1.6em 0;
 }
 
-.readme table {
+.readme table, .install-guide table {
   width: 100%;
   border-collapse: collapse;
 }
 
-.readme th, .readme td {
+.readme th, .readme td, .install-guide th, .install-guide td {
   border: 1px solid var(--line);
   padding: 0.45rem 0.6rem;
   text-align: left;
+}
+
+.install-guide {
+  overflow-wrap: anywhere;
+}
+
+/* "How to Install" popup (see artifact.ftl) */
+.modal {
+  border: none;
+  border-radius: 12px;
+  padding: 0;
+  background: var(--card);
+  color: var(--text);
+  width: min(32rem, calc(100vw - 2rem));
+}
+
+.modal::backdrop {
+  background: rgb(0 0 0 / 50%);
+}
+
+.modal-content {
+  padding: 1.25rem 1.4rem;
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.9rem;
+}
+
+.modal-header h2 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.modal-close {
+  background: none;
+  border: none;
+  padding: 0.15rem 0.45rem;
+  border-radius: 6px;
+  font-size: 1.4rem;
+  line-height: 1;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.modal-close:hover {
+  color: var(--text);
+  background: var(--bg);
+}
+
+.copy-button {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--card);
+  color: var(--muted);
+  font-size: 0.75rem;
+  padding: 0.25rem 0.55rem;
+  cursor: pointer;
+}
+
+.copy-button:hover {
+  color: var(--text);
+  border-color: var(--muted);
 }
 
 @media (max-width: 900px) {

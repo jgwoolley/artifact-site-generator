@@ -36,6 +36,7 @@ public class VsixArtifactParser implements ArtifactParser {
     private static final String PACKAGE_JSON_SUFFIX = "/package.json";
     private static final String README_BASENAME = "readme.md";
     private static final String ICON_RESOURCE_NAME = "icon.svg";
+    private static final String INSTALL_GUIDE_RESOURCE_NAME = "install.html";
     private static final String PARSER_ID = "vsix";
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
@@ -49,6 +50,12 @@ public class VsixArtifactParser implements ArtifactParser {
     @Override
     public String displayName() {
         return "VS Code Extension";
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public String installGuideResourceName() {
+        return INSTALL_GUIDE_RESOURCE_NAME;
     }
 
     /** {@inheritDoc} */

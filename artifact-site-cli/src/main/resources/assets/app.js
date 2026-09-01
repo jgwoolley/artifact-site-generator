@@ -170,3 +170,69 @@
       // Best effort: search stays inert if the index cannot be fetched.
     });
 })();
+
+// "How to Install" popup (see artifact.ftl) and copy-to-clipboard for its code blocks.
+(() => {
+  document.querySelectorAll('[data-dialog-open]').forEach((trigger) => {
+    trigger.addEventListener('click', () => {
+      const dialog = document.getElementById(trigger.dataset.dialogOpen);
+      if (dialog && typeof dialog.showModal === 'function') {
+        dialog.showModal();
+      }
+    });
+  });
+
+  document.querySelectorAll('dialog').forEach((dialog) => {
+    dialog.querySelectorAll('[data-dialog-close]').forEach((closeButton) => {
+      closeButton.addEventListener('click', () => dialog.close());
+    });
+
+    // A click landing on the <dialog> element itself (rather than its inner
+    // .modal-content) is a click on the backdrop area, so close on it.
+    dialog.addEventListener('click', (event) => {
+      if (event.target === dialog) {
+        dialog.close();
+      }
+    });
+  });
+
+  const fallbackCopy = (text) => {
+    const textarea = document.createElement('textarea');
+    textarea.value = text;
+    textarea.style.position = 'fixed';
+    textarea.style.opacity = '0';
+    document.body.appendChild(textarea);
+    textarea.select();
+    try {
+      document.execCommand('copy');
+    } finally {
+      textarea.remove();
+    }
+  };
+
+  document.querySelectorAll('.install-guide pre').forEach((pre) => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'copy-button';
+    button.textContent = 'Copy';
+    pre.appendChild(button);
+
+    button.addEventListener('click', async () => {
+      const code = pre.querySelector('code');
+      const text = (code || pre).textContent;
+      try {
+        if (navigator.clipboard && window.isSecureContext) {
+          await navigator.clipboard.writeText(text);
+        } else {
+          fallbackCopy(text);
+        }
+        button.textContent = 'Copied!';
+      } catch (error) {
+        button.textContent = 'Copy failed';
+      }
+      setTimeout(() => {
+        button.textContent = 'Copy';
+      }, 1500);
+    });
+  });
+})();

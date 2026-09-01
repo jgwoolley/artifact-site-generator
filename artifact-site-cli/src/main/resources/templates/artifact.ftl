@@ -28,6 +28,9 @@
             </li>
           </#if>
           <li><a href="${downloadUrl?html}">Download<#if fileSizeHumanReadable?has_content> (${fileSizeHumanReadable?html})</#if></a></li>
+          <#if installGuideHtml?has_content>
+            <li><button type="button" data-dialog-open="install-guide-dialog">How to Install</button></li>
+          </#if>
         </ul>
       </section>
 
@@ -56,4 +59,16 @@
       </#if>
     </aside>
   </div>
+
+  <#if installGuideHtml?has_content>
+    <dialog id="install-guide-dialog" class="modal">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h2>How to Install</h2>
+          <button type="button" class="modal-close" data-dialog-close aria-label="Close">&times;</button>
+        </div>
+        <div class="install-guide">${installGuideHtml}</div>
+      </div>
+    </dialog>
+  </#if>
 </@layout.page>

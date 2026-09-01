@@ -34,6 +34,7 @@ public class MavenArtifactParser implements ArtifactParser {
     private static final String POM_PROPERTIES_SUFFIX = "/pom.properties";
     private static final String MAVEN_METADATA_PREFIX = "META-INF/maven/";
     private static final String ICON_RESOURCE_NAME = "icon.svg";
+    private static final String INSTALL_GUIDE_RESOURCE_NAME = "install.html";
     private static final String PARSER_ID = "maven";
 
     /** {@inheritDoc} */
@@ -52,6 +53,12 @@ public class MavenArtifactParser implements ArtifactParser {
     @Override
     public String iconResourceName() {
         return ICON_RESOURCE_NAME;
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public String installGuideResourceName() {
+        return INSTALL_GUIDE_RESOURCE_NAME;
     }
 
     /** {@inheritDoc} */

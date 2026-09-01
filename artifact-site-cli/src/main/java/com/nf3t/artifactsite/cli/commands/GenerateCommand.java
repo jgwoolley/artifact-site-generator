@@ -102,8 +102,9 @@ public class GenerateCommand implements Runnable {
         copyAsset("assets/logo.svg", outputRoot.resolve("assets/logo.svg"));
 
         Map<String, String> parserIconUrls = copyParserIcons(parentCommand.iconsDir(), outputRoot);
-        Map<String, String> parserDisplayNames = readParserDisplayNames(parentCommand.parserDisplayNamesPath());
-        GenerationModel model = buildModel(artifactCatalog, outputRoot, parserIconUrls, parserDisplayNames);
+        Map<String, String> parserDisplayNames = readStringMapCache(parentCommand.parserDisplayNamesPath());
+        Map<String, String> parserInstallGuides = readStringMapCache(parentCommand.parserInstallGuidesPath());
+        GenerationModel model = buildModel(artifactCatalog, outputRoot, parserIconUrls, parserDisplayNames, parserInstallGuides);
         writeSearchIndex(outputRoot.resolve("search-index.json"), model.searchIndexEntries());
 
         Configuration freemarker = createFreemarkerConfiguration();
@@ -172,7 +173,8 @@ public class GenerateCommand implements Runnable {
             List<ArtifactMetadata> artifactCatalog,
             Path outputRoot,
             Map<String, String> parserIconUrls,
-            Map<String, String> parserDisplayNames)
+            Map<String, String> parserDisplayNames,
+            Map<String, String> parserInstallGuides)
             throws IOException {
         Map<String, Map<String, List<ArtifactMetadata>>> grouped = new LinkedHashMap<>();
 
@@ -200,6 +202,7 @@ public class GenerateCommand implements Runnable {
         for (String parserName : parserNames) {
             String parserSegment = toPathSegment(parserName);
             String parserDisplayName = parserDisplayNames.getOrDefault(parserName, parserName);
+            String installGuideTemplate = parserInstallGuides.get(parserName);
             List<ArtifactGroup> artifactGroups = new ArrayList<>();
             List<Map<String, Object>> latestArtifacts = new ArrayList<>();
 
@@ -261,6 +264,7 @@ public class GenerateCommand implements Runnable {
                     detailPage.put("downloadUrl", downloadUrl);
                     detailPage.put("pageIcon", parserIconUrl);
                     detailPage.put("readmeHtml", renderMarkdown(version.getReadme()));
+                    detailPage.put("installGuideHtml", renderInstallGuide(installGuideTemplate, version));
                     detailPage.put("tags", normalizeTags(version.getTags()));
                     detailPage.put("authors", normalizeTags(version.getAuthors()));
                     detailPages.add(detailPage);
@@ -373,24 +377,24 @@ public class GenerateCommand implements Runnable {
     }
 
     /**
-     * Reads the cached parser plugin id -> UI display name map (see {@code
-     * ParserDisplayNameCache}), populated by {@code parse}. Falls back to an empty map when the
-     * cache is missing or unreadable, so callers should fall back to the raw plugin id per entry.
+     * Reads a parser id -> string JSON cache file (see {@code ParserDisplayNameCache} and
+     * {@code ParserInstallGuideCache}), populated by {@code parse}. Falls back to an empty map
+     * when the cache is missing or unreadable, so callers should fall back sensibly per entry
+     * (e.g. the raw parser id, or omitting the feature entirely).
      *
-     * @param cachePath parser display name cache file populated by {@code parse}
-     * @return display name by parser plugin id
+     * @param cachePath parser id -> string cache file populated by {@code parse}
+     * @return cached value by parser id
      */
-    private Map<String, String> readParserDisplayNames(Path cachePath) {
+    private Map<String, String> readStringMapCache(Path cachePath) {
         if (!Files.isRegularFile(cachePath)) {
             return Map.of();
         }
         try (InputStream input = Files.newInputStream(cachePath)) {
-            Map<String, String> displayNames =
-                    OBJECT_MAPPER.readValue(input, new TypeReference<Map<String, String>>() {
-                    });
-            return displayNames == null ? Map.of() : displayNames;
+            Map<String, String> values = OBJECT_MAPPER.readValue(input, new TypeReference<Map<String, String>>() {
+            });
+            return values == null ? Map.of() : values;
         } catch (IOException e) {
-            LOGGER.warn("Failed to read parser display name cache at " + cachePath, e);
+            LOGGER.warn("Failed to read parser cache at " + cachePath, e);
             return Map.of();
         }
     }
@@ -561,6 +565,38 @@ public class GenerateCommand implements Runnable {
             return "";
         }
         return MARKDOWN_RENDERER.render(MARKDOWN_PARSER.parse(markdown));
+    }
+
+    /**
+     * Substitutes an artifact's own values into its parser's install guide template (see
+     * {@code ArtifactParser#installGuideResourceName()}) for the "How to Install" popup on the
+     * artifact detail page. The template itself is trusted, parser-author-controlled HTML and is
+     * emitted as-is; only the substituted {@code {{groupId}}}/{@code {{artifactId}}}/
+     * {@code {{version}}} placeholder values are HTML-escaped, since those come from the parsed
+     * artifact (e.g. a third-party VSIX manifest).
+     *
+     * @param template install guide HTML template, or {@code null} when the parser has none
+     * @param artifact artifact whose values fill the template's placeholders
+     * @return rendered install guide HTML, or an empty string when there is no template
+     */
+    private static String renderInstallGuide(@Nullable String template, ArtifactMetadata artifact) {
+        if (isBlank(template)) {
+            return "";
+        }
+        return template
+                .replace("{{groupId}}", escapeHtml(safe(artifact.getGroupId())))
+                .replace("{{artifactId}}", escapeHtml(safe(artifact.getArtifactId())))
+                .replace("{{version}}", escapeHtml(safe(artifact.getVersion())));
+    }
+
+    /** Escapes text for safe inclusion in HTML markup. */
+    private static String escapeHtml(String value) {
+        return value
+                .replace("&", "&amp;")
+                .replace("<", "&lt;")
+                .replace(">", "&gt;")
+                .replace("\"", "&quot;")
+                .replace("'", "&#39;");
     }
 
     /**
