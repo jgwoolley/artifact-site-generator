@@ -2,6 +2,7 @@ package com.nf3t.artifactsite.plugin.vsix;
 
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
@@ -33,6 +34,7 @@ public class VsixArtifactParser implements ArtifactParser {
 
     private static final String SOURCE_LINK_PROPERTY = "Microsoft.VisualStudio.Services.Links.Source";
     private static final String PACKAGE_JSON_SUFFIX = "/package.json";
+    private static final String README_BASENAME = "readme.md";
     private static final String ICON_RESOURCE_NAME = "icon.svg";
     private static final String PARSER_ID = "vsix";
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
@@ -103,6 +105,7 @@ public class VsixArtifactParser implements ArtifactParser {
             metadata.setFileSizeBytes(content.length);
             metadata.setPluginId(id());
             metadata.setScmUrl(sourceUrl);
+            metadata.setReadme(readReadme(content));
     	}
     	
     	String sha256 = PathUtils.sha256(descriptor.contentPath());
@@ -134,6 +137,41 @@ public class VsixArtifactParser implements ArtifactParser {
             // Manifest metadata remains available when package.json cannot be read.
         }
         return new PackageMetadata(null, null, List.of(), null);
+    }
+
+    /**
+     * Discovers and reads the extension's README, if packaged. VSIX packages typically nest
+     * their contents under an {@code extension/} root (alongside {@code package.json}), so when
+     * more than one {@code readme.md} entry exists (case-insensitive), the one with the shortest
+     * path - closest to that root - wins.
+     *
+     * @param content complete VSIX content
+     * @return raw README markdown, or {@code null} when no README is packaged
+     */
+    private @Nullable String readReadme(byte[] content) {
+        try (ZipInputStream zipInput = new ZipInputStream(new ByteArrayInputStream(content))) {
+            ZipEntry entry;
+            String bestPath = null;
+            String bestReadme = null;
+            while ((entry = zipInput.getNextEntry()) != null) {
+                if (entry.isDirectory()) {
+                    continue;
+                }
+                String path = entry.getName();
+                int lastSlash = path.lastIndexOf('/');
+                String baseName = lastSlash >= 0 ? path.substring(lastSlash + 1) : path;
+                if (!README_BASENAME.equalsIgnoreCase(baseName)) {
+                    continue;
+                }
+                if (bestPath == null || path.length() < bestPath.length()) {
+                    bestPath = path;
+                    bestReadme = new String(zipInput.readAllBytes(), StandardCharsets.UTF_8);
+                }
+            }
+            return bestReadme;
+        } catch (Exception ignored) {
+            return null;
+        }
     }
 
     /** Reads author and contributor names from package metadata. */

@@ -166,4 +166,78 @@ class VsixArtifactParserTest {
         ArtifactMetadata metadata = metadataRef.get();
         assertThat(metadata.getArtifactName()).isEqualTo("Namespaced Extension");
     }
+
+    @Test
+    void parsesReadmeFromExtensionRoot() throws Exception {
+        Path vsix = Files.createTempFile("readme-sample", ".vsix");
+        try (ZipOutputStream out = new ZipOutputStream(Files.newOutputStream(vsix))) {
+            out.putNextEntry(new ZipEntry("extension.vsixmanifest"));
+            out.write(("""
+                    <PackageManifest>
+                      <Metadata>
+                        <Identity Id="artifact-id" Version="1.0.0" Publisher="example.publisher" />
+                      </Metadata>
+                    </PackageManifest>
+                    """).getBytes());
+            out.closeEntry();
+            out.putNextEntry(new ZipEntry("extension/README.md"));
+            out.write("# Extension\n\nSome docs.".getBytes());
+            out.closeEntry();
+            // A nested README should lose to the one closer to the extension root.
+            out.putNextEntry(new ZipEntry("extension/docs/README.md"));
+            out.write("# Nested\n\nShould not win.".getBytes());
+            out.closeEntry();
+        }
+
+        final AtomicReference<ArtifactMetadata> metadataRef = new AtomicReference<>();
+        try (InputStream input = Files.newInputStream(vsix)) {
+            parser.parse(new ArtifactInputDescriptor(
+                    vsix, ArtifactSourceType.LOCAL,
+                    vsix.toString(),
+                    vsix.getFileName().toString(),
+                    "vsix",
+                    "application/zip"), new IArtifactParseContext() {
+                @Override
+                public void writeArtifact(ArtifactInputDescriptor descriptor, ArtifactMetadata artifact) {
+                    metadataRef.set(artifact);
+                }
+            });
+        }
+
+        ArtifactMetadata metadata = metadataRef.get();
+        assertThat(metadata.getReadme()).isEqualTo("# Extension\n\nSome docs.");
+    }
+
+    @Test
+    void leavesReadmeNullWhenNotPackaged() throws Exception {
+        Path vsix = Files.createTempFile("no-readme-sample", ".vsix");
+        try (ZipOutputStream out = new ZipOutputStream(Files.newOutputStream(vsix))) {
+            out.putNextEntry(new ZipEntry("extension.vsixmanifest"));
+            out.write(("""
+                    <PackageManifest>
+                      <Metadata>
+                        <Identity Id="artifact-id" Version="1.0.0" Publisher="example.publisher" />
+                      </Metadata>
+                    </PackageManifest>
+                    """).getBytes());
+            out.closeEntry();
+        }
+
+        final AtomicReference<ArtifactMetadata> metadataRef = new AtomicReference<>();
+        try (InputStream input = Files.newInputStream(vsix)) {
+            parser.parse(new ArtifactInputDescriptor(
+                    vsix, ArtifactSourceType.LOCAL,
+                    vsix.toString(),
+                    vsix.getFileName().toString(),
+                    "vsix",
+                    "application/zip"), new IArtifactParseContext() {
+                @Override
+                public void writeArtifact(ArtifactInputDescriptor descriptor, ArtifactMetadata artifact) {
+                    metadataRef.set(artifact);
+                }
+            });
+        }
+
+        assertThat(metadataRef.get().getReadme()).isNull();
+    }
 }

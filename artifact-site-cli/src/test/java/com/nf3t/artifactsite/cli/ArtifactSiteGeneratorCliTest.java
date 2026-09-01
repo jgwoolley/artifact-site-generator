@@ -293,6 +293,7 @@ class ArtifactSiteGeneratorCliTest {
         v2.setSourceValue(localArtifact.toString());
         v2.setFileName("demo-2.0.0.vsix");
         v2.setFileSizeBytes(2048L);
+        v2.setReadme("# Demo\n\nThis is the **readme** body.");
 
         OBJECT_MAPPER.writeValue(artifactJson.toFile(), List.of(v1, v2));
 
@@ -333,7 +334,12 @@ class ArtifactSiteGeneratorCliTest {
         assertThat(detailPage).contains("second release");
         assertThat(detailPage).contains("Download");
         assertThat(detailPage).contains("/downloads/demo/2.0.0/demo-2.0.0.vsix");
-        assertThat(detailPage).contains("2.0 KB (2048 bytes)");
+        assertThat(detailPage).contains("2.0 KB");
+        assertThat(detailPage).contains("<h1>Demo</h1>");
+        assertThat(detailPage).contains("<strong>readme</strong>");
+
+        String noReadmeDetailPage = Files.readString(outputDir.resolve("artifacts/vsix/acme.demo/1.0.0/index.html"));
+        assertThat(noReadmeDetailPage).contains("No README was found for this artifact.");
 
         String rootIndex = Files.readString(outputDir.resolve("index.html"));
         assertThat(rootIndex).contains("Acme Demo");

@@ -26,6 +26,7 @@ public class ArtifactMetadata {
     private @Nullable String sha256;
     private @Nullable String pluginId;
     private @Nullable String scmUrl;
+    private @Nullable String readme;
 
     /** @return stable artifact identifier */
     public @Nullable String getId() { return id; }
@@ -124,9 +125,15 @@ public class ArtifactMetadata {
     public void setPluginId(@Nullable String pluginId) { this.pluginId = pluginId; }
 
     public @Nullable String getScmUrl() { return scmUrl; }
-    
+
     public void setScmUrl(@Nullable String scmUrl) { this.scmUrl = scmUrl; }
-    
+
+    /** @return raw README markdown discovered inside the artifact, if any */
+    public @Nullable String getReadme() { return readme; }
+
+    /** @param readme raw README markdown discovered inside the artifact, if any */
+    public void setReadme(@Nullable String readme) { this.readme = readme; }
+
     public String getArtifactSlug() {
     	return getGroupId() + "." + getArtifactId();
     }

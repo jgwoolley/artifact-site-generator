@@ -20,6 +20,9 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.regex.Pattern;
 
+import org.commonmark.parser.Parser;
+import org.commonmark.renderer.html.HtmlRenderer;
+import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -44,6 +47,11 @@ public class GenerateCommand implements Runnable {
     private static final Logger LOGGER = LoggerFactory.getLogger(GenerateCommand.class);
     private static final Pattern SANITIZE_SEGMENT = Pattern.compile("[^a-zA-Z0-9._-]");
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+    private static final Parser MARKDOWN_PARSER = Parser.builder().build();
+    // README markdown comes from arbitrary third-party artifacts; escaping any raw HTML in the
+    // source (rather than passing it through) keeps a malicious README from injecting a
+    // <script> or other active content into the generated site.
+    private static final HtmlRenderer MARKDOWN_RENDERER = HtmlRenderer.builder().escapeHtml(true).build();
 
     @ParentCommand
     private ArtifactSiteGeneratorCli parentCommand;
@@ -252,6 +260,7 @@ public class GenerateCommand implements Runnable {
                     detailPage.put("fileSizeHumanReadable", formatFileSize(version.getFileSizeBytes()));
                     detailPage.put("downloadUrl", downloadUrl);
                     detailPage.put("pageIcon", parserIconUrl);
+                    detailPage.put("readmeHtml", renderMarkdown(version.getReadme()));
                     detailPage.put("tags", normalizeTags(version.getTags()));
                     detailPage.put("authors", normalizeTags(version.getAuthors()));
                     detailPages.add(detailPage);
@@ -539,6 +548,19 @@ public class GenerateCommand implements Runnable {
             return artifact.getArtifactName();
         }
         return artifact.getArtifactSlug();
+    }
+
+    /**
+     * Renders a parser-discovered README as HTML for the artifact detail page's main content.
+     *
+     * @param markdown raw README markdown, or {@code null} when the artifact has none
+     * @return rendered HTML, or an empty string when there is no README to render
+     */
+    private static String renderMarkdown(@Nullable String markdown) {
+        if (isBlank(markdown)) {
+            return "";
+        }
+        return MARKDOWN_RENDERER.render(MARKDOWN_PARSER.parse(markdown));
     }
 
     /**

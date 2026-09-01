@@ -17,6 +17,7 @@ A Java CLI that parses release artifacts (VSIX extensions, Maven/JAR artifacts, 
 - **Apache HttpClient 5** for remote artifact download/streaming
 - **Jackson** for metadata and config serialization
 - **Apache FreeMarker** for static HTML templating
+- **commonmark-java** for rendering discovered READMEs to HTML
 - **SLF4J + slf4j-simple** for logging
 - **JUnit 5 + AssertJ**, with Maven Surefire/Failsafe for unit/integration test separation
 
@@ -119,13 +120,26 @@ Each catalog record (`ArtifactMetadata`) includes:
 - `sourceType` (`local` or `remote`), `sourceValue` (local path or URL)
 - `downloadUrl`, `fileName`, `fileSizeBytes`, `sha256`
 - `pluginId` (which parser produced this record)
+- `readme` (raw README markdown discovered inside the artifact, if any - see below)
 
 Parser-specific metadata sources:
 
 - **Maven**: reads `name`, `description`, `developers`, and `scm` from the embedded
   `META-INF/maven/<group>/<artifact>/pom.xml`.
 - **VSIX**: reads `displayName`, `description`, `author`, `contributors`, and `repository` from the packaged
-  `package.json`, with manifest fallbacks for display name, description, and source URL.
+  `package.json`, with manifest fallbacks for display name, description, and source URL. Also discovers a
+  packaged `readme.md` (case-insensitive; when more than one exists, the one closest to the extension's
+  `extension/` root wins).
+
+### README rendering
+
+A parser can populate `ArtifactMetadata.readme` with the raw markdown text of a README it finds inside the
+artifact (only the VSIX parser does this today, via the extension's packaged `readme.md`; the metadata field
+itself is generic, so any parser can support it). `generate` renders that markdown to HTML with
+commonmark-java and makes it the main content of the artifact detail page, with **raw HTML in the source
+markdown escaped rather than passed through** - READMEs come from arbitrary third-party artifacts, so this
+keeps a malicious one from injecting a `<script>` or other active content into the generated site. An artifact
+with no README shows a plain "No README was found for this artifact." message instead.
 
 ## Plugin API
 
@@ -180,11 +194,14 @@ Rendered from FreeMarker templates in `artifact-site-cli/src/main/resources/temp
 - `index.html` - lists unique parsers
 - `artifacts/<parser-type>/index.html` - lists unique `<group-id>.<artifact-id>`, using each one's latest version
 - `artifacts/<parser-type>/<group-id>.<artifact-id>/index.html` - lists all versions of an artifact, latest first
-- `artifacts/<parser-type>/<group-id>.<artifact-id>/<version>/index.html` - artifact detail page
+- `artifacts/<parser-type>/<group-id>.<artifact-id>/<version>/index.html` - artifact detail page: rendered
+  README as the main content (or a "no README" note) alongside a sidebar with Resources/Details/Tags cards,
+  loosely modeled on Open VSX's extension page
 - `tags/<tag>/index.html` - tag-filtered listing
 - `assets/styles.css`, `assets/app.js`, `assets/logo.svg`
 - `assets/icons/<pluginId>.<ext>` - each parser plugin's default icon, copied from the icons cache
-- `search-index.json` - powers client-side search/filter (vanilla JS, no runtime CSS framework)
+- `search-index.json` - powers the header search box's live results dropdown (vanilla JS, no runtime CSS
+  framework)
 - `downloads/...` - copies of locally-sourced artifacts only
 
 ## Non-goals

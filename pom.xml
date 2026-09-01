@@ -31,6 +31,7 @@
     <picocli.version>4.7.7</picocli.version>
     <jackson.version>3.0.0</jackson.version>
     <junit.version>5.11.4</junit.version>
+    <commonmark.version>0.22.0</commonmark.version>
   </properties>
 
   <dependencyManagement>
@@ -46,6 +47,11 @@
           <groupId>tools.jackson.core</groupId>
           <artifactId>jackson-databind</artifactId>
           <version>${jackson.version}</version>
+        </dependency>
+        <dependency>
+          <groupId>org.commonmark</groupId>
+          <artifactId>commonmark</artifactId>
+          <version>${commonmark.version}</version>
         </dependency>
     </dependencies>
   </dependencyManagement>
