@@ -216,6 +216,9 @@ Rendered from FreeMarker templates in `artifact-site-cli/src/main/resources/temp
   README as the main content (or a "no README" note) alongside a sidebar with Resources/Details/Tags cards,
   loosely modeled on Open VSX's extension page
 - `tags/<tag>/index.html` - tag-filtered listing
+- `build-info.html` - provenance for the generated site: CI/CD provider, source repository/commit link, and
+  pipeline/run link, read from GitHub Actions or GitLab CI environment variables at `generate` time (blank on a
+  local build with neither set); linked from the "Build Info" link in the header on every page
 - `assets/styles.css`, `assets/app.js`, `assets/logo.svg`
 - `assets/icons/<pluginId>.<ext>` - each parser plugin's default icon, copied from the icons cache
 - `search-index.json` - powers the header search box's live results dropdown (vanilla JS, no runtime CSS
@@ -253,3 +256,4 @@ client-side search are implemented and working. Remaining work:
 - Maven description
 - Search should give a hint on what it matched against.
 - SHA256 stuff should get moved back into cli. All common stuff should happen preprocessor.
+- Move Banner stuff to a "product.json file"

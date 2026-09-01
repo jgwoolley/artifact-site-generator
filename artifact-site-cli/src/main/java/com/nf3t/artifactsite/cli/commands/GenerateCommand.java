@@ -8,6 +8,9 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.time.Instant;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -109,6 +112,7 @@ public class GenerateCommand implements Runnable {
 
         Configuration freemarker = createFreemarkerConfiguration();
         writeTemplate(freemarker, "index.ftl", outputRoot.resolve("index.html"), createRootIndexData(model, parserIconUrls));
+        writeTemplate(freemarker, "build-info.ftl", outputRoot.resolve("build-info.html"), createBuildInfoData(System.getenv()));
 
         for (ParserGroup parserGroup : model.parserGroups()) {
             Path parserIndexPath = outputRoot.resolve("artifacts").resolve(parserGroup.parserSegment()).resolve("index.html");
@@ -305,6 +309,89 @@ public class GenerateCommand implements Runnable {
         modelData.put("parserSummaries", parserSummaries);
         modelData.put("artifactCards", model.allLatestArtifactCards());
         return modelData;
+    }
+
+    /**
+     * Builds template data for the generated site's build info page, surfacing whatever CI/CD
+     * context is available so a deployed site can be traced back to the pipeline run and source
+     * commit that produced it. Recognizes GitHub Actions ({@code GITHUB_ACTIONS}) and GitLab CI
+     * ({@code GITLAB_CI}) environment variables; falls back to a "not run in CI/CD" state when
+     * neither is present (e.g. a local {@code generate} invocation).
+     *
+     * @param env process environment variables (see {@link System#getenv()})
+     * @return template data for {@code build-info.ftl}
+     */
+    private Map<String, Object> createBuildInfoData(Map<String, String> env) {
+        Map<String, Object> data = new HashMap<>();
+        data.put("title", "Build Info");
+        data.put("pageHeading", "Build Info");
+        data.put("pageDescription", "Provenance for this generated site");
+        data.put("rootPath", "");
+
+        String provider = "";
+        String repositoryName = "";
+        String repositoryUrl = "";
+        String commitSha = "";
+        String ref = "";
+        String commitUrl = "";
+        String runLabel = "";
+        String runUrl = "";
+        String workflowName = "";
+        String triggeredBy = "";
+        String eventName = "";
+
+        if ("true".equalsIgnoreCase(env.get("GITHUB_ACTIONS"))) {
+            provider = "GitHub Actions";
+            repositoryName = safe(env.get("GITHUB_REPOSITORY"));
+            String serverUrl = safe(env.get("GITHUB_SERVER_URL"));
+            repositoryUrl = isBlank(serverUrl) || isBlank(repositoryName) ? "" : serverUrl + "/" + repositoryName;
+            commitSha = safe(env.get("GITHUB_SHA"));
+            ref = safe(env.get("GITHUB_REF_NAME"));
+            commitUrl = isBlank(repositoryUrl) || isBlank(commitSha) ? "" : repositoryUrl + "/commit/" + commitSha;
+            String runId = safe(env.get("GITHUB_RUN_ID"));
+            String runNumber = safe(env.get("GITHUB_RUN_NUMBER"));
+            runUrl = isBlank(repositoryUrl) || isBlank(runId) ? "" : repositoryUrl + "/actions/runs/" + runId;
+            runLabel = isBlank(runNumber) ? "" : "Run #" + runNumber;
+            workflowName = safe(env.get("GITHUB_WORKFLOW"));
+            triggeredBy = safe(env.get("GITHUB_ACTOR"));
+            eventName = safe(env.get("GITHUB_EVENT_NAME"));
+        } else if ("true".equalsIgnoreCase(env.get("GITLAB_CI"))) {
+            provider = "GitLab CI/CD";
+            repositoryUrl = safe(env.get("CI_PROJECT_URL"));
+            repositoryName = safe(env.get("CI_PROJECT_PATH"));
+            if (isBlank(repositoryName)) {
+                repositoryName = safe(env.get("CI_PROJECT_NAME"));
+            }
+            commitSha = safe(env.get("CI_COMMIT_SHA"));
+            ref = safe(env.get("CI_COMMIT_REF_NAME"));
+            commitUrl = isBlank(repositoryUrl) || isBlank(commitSha) ? "" : repositoryUrl + "/-/tree/" + commitSha;
+            runUrl = safe(env.get("CI_PIPELINE_URL"));
+            String pipelineId = safe(env.get("CI_PIPELINE_ID"));
+            runLabel = isBlank(pipelineId) ? "" : "Pipeline #" + pipelineId;
+            workflowName = safe(env.get("CI_PIPELINE_NAME"));
+            triggeredBy = safe(env.get("GITLAB_USER_LOGIN"));
+            eventName = safe(env.get("CI_PIPELINE_SOURCE"));
+        }
+
+        data.put("hasCiInfo", !isBlank(provider));
+        data.put("provider", provider);
+        data.put("repositoryName", repositoryName);
+        data.put("repositoryUrl", repositoryUrl);
+        data.put("commitSha", commitSha);
+        data.put("commitShortSha", commitSha.length() > 7 ? commitSha.substring(0, 7) : commitSha);
+        data.put("commitUrl", commitUrl);
+        data.put("ref", ref);
+        data.put("runLabel", runLabel);
+        data.put("runUrl", runUrl);
+        data.put("workflowName", workflowName);
+        data.put("triggeredBy", triggeredBy);
+        data.put("eventName", eventName);
+        data.put(
+                "generatedAt",
+                DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.ROOT)
+                        .withZone(ZoneOffset.UTC)
+                        .format(Instant.now()));
+        return data;
     }
 
     private Configuration createFreemarkerConfiguration() {

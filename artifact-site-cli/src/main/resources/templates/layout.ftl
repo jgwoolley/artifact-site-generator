@@ -1,4 +1,4 @@
-<#macro page title rootPath pageHeading pageDescription pageIcon="">
+<#macro page title rootPath pageHeading pageDescription pageIcon="" bodyClass="" hideHeading=false>
 <!doctype html>
 <html lang="en">
 <head>
@@ -8,7 +8,7 @@
   <link rel="icon" type="image/svg+xml" href="${rootPath}assets/logo.svg">
   <link rel="stylesheet" href="${rootPath}assets/styles.css">
 </head>
-<body data-root-path="${rootPath}">
+<body class="page<#if bodyClass?has_content> ${bodyClass}</#if>" data-root-path="${rootPath}">
   <#if bannerText?has_content>
     <div
       class="site-banner"
@@ -34,14 +34,23 @@
         aria-autocomplete="list">
       <div id="search-results" class="search-results" role="listbox" hidden></div>
     </div>
+    <a class="nav-icon-link" href="${rootPath}build-info.html" aria-label="Build Info" title="Build Info">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+        <circle cx="12" cy="12" r="10"></circle>
+        <line x1="12" y1="16" x2="12" y2="12"></line>
+        <circle cx="12" cy="8" r="1" fill="currentColor" stroke="none"></circle>
+      </svg>
+    </a>
   </header>
   <main class="container">
-    <div class="page-heading">
-      <#if pageIcon?has_content><img class="page-icon" src="${rootPath}${pageIcon?remove_beginning('/')}" alt="" width="56" height="56"></#if>
-      <h1>${pageHeading?html}</h1>
-    </div>
-    <#if pageDescription?has_content>
-      <p class="lead">${pageDescription?html}</p>
+    <#if !hideHeading>
+      <div class="page-heading">
+        <#if pageIcon?has_content><img class="page-icon" src="${rootPath}${pageIcon?remove_beginning('/')}" alt="" width="56" height="56"></#if>
+        <h1>${pageHeading?html}</h1>
+      </div>
+      <#if pageDescription?has_content>
+        <p class="lead">${pageDescription?html}</p>
+      </#if>
     </#if>
     <#nested>
   </main>
