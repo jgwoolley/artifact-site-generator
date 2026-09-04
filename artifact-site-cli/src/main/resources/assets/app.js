@@ -184,6 +184,20 @@
     });
 })();
 
+// Renders UTC timestamps (see build-info.ftl's "Built At") in the viewer's local time zone.
+// The manifest/UTC value is kept in the `datetime` attribute for accessibility and copy-paste.
+(() => {
+  document.querySelectorAll('time[data-utc-timestamp]').forEach((el) => {
+    const raw = el.dataset.utcTimestamp;
+    const parsed = raw ? new Date(raw) : null;
+    if (!parsed || Number.isNaN(parsed.getTime())) {
+      return;
+    }
+    el.dateTime = raw;
+    el.textContent = parsed.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'long' });
+  });
+})();
+
 // "How to Install" popup (see artifact.ftl) and copy-to-clipboard for its code blocks.
 (() => {
   document.querySelectorAll('[data-dialog-open]').forEach((trigger) => {

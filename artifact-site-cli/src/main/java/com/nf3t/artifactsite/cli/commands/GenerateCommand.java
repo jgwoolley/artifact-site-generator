@@ -3,11 +3,13 @@ package com.nf3t.artifactsite.cli.commands;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.Writer;
+import java.net.URISyntaxException;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.security.CodeSource;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
@@ -22,6 +24,8 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.jar.JarFile;
+import java.util.jar.Manifest;
 import java.util.regex.Pattern;
 
 import org.commonmark.parser.Parser;
@@ -446,7 +450,49 @@ public class GenerateCommand implements Runnable {
                 DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.ROOT)
                         .withZone(ZoneOffset.UTC)
                         .format(Instant.now()));
+
+        Map<String, String> cliManifestAttributes = readCliManifestAttributes();
+        data.put("cliTitle", safe(cliManifestAttributes.get("Implementation-Title")));
+        data.put("cliVersion", safe(cliManifestAttributes.get("Implementation-Version")));
+        data.put("cliVendor", safe(cliManifestAttributes.get("Implementation-Vendor")));
+        data.put("cliBuildJdk", safe(cliManifestAttributes.get("Build-Jdk-Spec")));
+        data.put("cliBuiltAt", safe(cliManifestAttributes.get("Implementation-Timestamp")));
         return data;
+    }
+
+    /**
+     * Reads the {@code Implementation-*}/{@code Build-Jdk-Spec} attributes that the shaded CLI
+     * jar's manifest is stamped with at build time (see the {@code maven-shade-plugin}
+     * {@code manifestEntries} in {@code artifact-site-cli/pom.xml}), so {@code build-info.html} can
+     * show provenance for the CLI tool itself alongside the CI/CD provenance for the site it
+     * generated. Falls back to an empty map when not running from a jar (e.g. tests or an IDE
+     * launch), since there is no single manifest to attribute to the running classes in that case.
+     *
+     * @return manifest attribute values by name, or an empty map if unavailable
+     */
+    private Map<String, String> readCliManifestAttributes() {
+        try {
+            CodeSource codeSource = GenerateCommand.class.getProtectionDomain().getCodeSource();
+            if (codeSource == null || codeSource.getLocation() == null) {
+                return Map.of();
+            }
+            Path location = Path.of(codeSource.getLocation().toURI());
+            if (!Files.isRegularFile(location)) {
+                return Map.of();
+            }
+            try (JarFile jarFile = new JarFile(location.toFile())) {
+                Manifest manifest = jarFile.getManifest();
+                if (manifest == null) {
+                    return Map.of();
+                }
+                Map<String, String> attributes = new HashMap<>();
+                manifest.getMainAttributes().forEach((key, value) -> attributes.put(key.toString(), (String) value));
+                return attributes;
+            }
+        } catch (IOException | URISyntaxException e) {
+            LOGGER.warn("Could not read CLI build manifest", e);
+            return Map.of();
+        }
     }
 
     private Configuration createFreemarkerConfiguration() {

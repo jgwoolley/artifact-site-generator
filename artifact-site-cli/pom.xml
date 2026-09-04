@@ -90,6 +90,16 @@
               <transformers>
                 <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
                   <mainClass>com.nf3t.artifactsite.cli.ArtifactSiteGeneratorCli</mainClass>
+                  <manifestEntries>
+                    <!-- ${maven.build.timestamp} is always rendered in UTC by Maven, regardless of
+                         the build machine's local time zone; read back in GenerateCommand and shown
+                         on build-info.html, along with the other entries below. -->
+                    <Implementation-Timestamp>${maven.build.timestamp}</Implementation-Timestamp>
+                    <Implementation-Title>${project.name}</Implementation-Title>
+                    <Implementation-Version>${project.version}</Implementation-Version>
+                    <Implementation-Vendor>jgwoolley</Implementation-Vendor>
+                    <Build-Jdk-Spec>${java.specification.version}</Build-Jdk-Spec>
+                  </manifestEntries>
                 </transformer>
               </transformers>
             </configuration>
