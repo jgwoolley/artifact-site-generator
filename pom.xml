@@ -1,13 +1,13 @@
-<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+<?xml version="1.0" encoding="UTF-8"?><project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
-
   <groupId>com.nf3t</groupId>
   <artifactId>artifact-site-parent</artifactId>
   <version>0.1.0-SNAPSHOT</version>
   <packaging>pom</packaging>
   <developers>
-    <developer><name>jgwoolley</name></developer>
+    <developer>
+      <name>jgwoolley</name>
+    </developer>
   </developers>
   <scm>
     <url>https://github.com/jgwoolley/artifact-site-generator</url>
@@ -15,15 +15,13 @@
     <developerConnection>scm:git:ssh://github.com/jgwoolley/artifact-site-generator.git</developerConnection>
     <tag>HEAD</tag>
   </scm>
-
   <modules>
     <module>artifact-site-plugins-api</module>
     <module>artifact-site-cli</module>
+    <module>artifact-site-plugin-archetype</module>
     <module>artifact-site-plugin-vsix</module>
     <module>artifact-site-plugin-maven</module>
-    <module>artifact-site-plugin-archetype</module>
   </modules>
-
   <properties>
     <maven.compiler.source>17</maven.compiler.source>
     <maven.compiler.target>17</maven.compiler.target>
@@ -34,7 +32,6 @@
     <junit.version>5.11.4</junit.version>
     <commonmark.version>0.22.0</commonmark.version>
   </properties>
-
   <dependencyManagement>
     <dependencies>
       <dependency>
@@ -44,19 +41,18 @@
         <type>pom</type>
         <scope>import</scope>
       </dependency>
-        <dependency>
-          <groupId>tools.jackson.core</groupId>
-          <artifactId>jackson-databind</artifactId>
-          <version>${jackson.version}</version>
-        </dependency>
-        <dependency>
-          <groupId>org.commonmark</groupId>
-          <artifactId>commonmark</artifactId>
-          <version>${commonmark.version}</version>
-        </dependency>
+      <dependency>
+        <groupId>tools.jackson.core</groupId>
+        <artifactId>jackson-databind</artifactId>
+        <version>${jackson.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.commonmark</groupId>
+        <artifactId>commonmark</artifactId>
+        <version>${commonmark.version}</version>
+      </dependency>
     </dependencies>
   </dependencyManagement>
-
   <build>
     <pluginManagement>
       <plugins>

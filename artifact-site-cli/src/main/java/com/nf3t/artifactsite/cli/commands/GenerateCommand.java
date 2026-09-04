@@ -127,11 +127,14 @@ public class GenerateCommand implements Runnable {
     }
 
     void generate(List<ArtifactMetadata> artifactCatalog, Path outputRoot) throws IOException, TemplateException {
+        String generatedAt = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.ROOT)
+                .withZone(ZoneOffset.UTC)
+                .format(Instant.now());
+
         Files.createDirectories(outputRoot);
         copyAsset("assets/styles.css", outputRoot.resolve("assets/styles.css"));
         copyAsset("assets/app.js", outputRoot.resolve("assets/app.js"));
         copyAsset("assets/logo.svg", outputRoot.resolve("assets/logo.svg"));
-        copyAsset("sw.js", outputRoot.resolve("sw.js"));
         copyFavicon(outputRoot);
 
         String homePageTitle = isBlank(siteTitle) ? "Artifact Registry" : siteTitle;
@@ -151,7 +154,8 @@ public class GenerateCommand implements Runnable {
                 "index.ftl",
                 outputRoot.resolve("index.html"),
                 createRootIndexData(model, parserIconUrls, homePageTitle));
-        writeTemplate(freemarker, "build-info.ftl", outputRoot.resolve("build-info.html"), createBuildInfoData(System.getenv()));
+        writeTemplate(
+                freemarker, "build-info.ftl", outputRoot.resolve("build-info.html"), createBuildInfoData(System.getenv(), generatedAt));
 
         for (ParserGroup parserGroup : model.parserGroups()) {
             Path parserIndexPath = outputRoot.resolve("artifacts").resolve(parserGroup.parserSegment()).resolve("index.html");
@@ -218,6 +222,57 @@ public class GenerateCommand implements Runnable {
             tagData.put("artifactCards", tagArtifactCards);
             writeTemplate(freemarker, "tag.ftl", tagPath, tagData);
         }
+
+        // Must run last: the precache list (see collectPrecacheUrls) has to reflect every file
+        // this run wrote above, and sw.js itself is naturally excluded since it doesn't exist yet.
+        writeServiceWorker(freemarker, outputRoot, generatedAt);
+    }
+
+    /**
+     * Writes the site's service worker (see {@code sw.ftl}), eagerly precaching every file this
+     * {@code generate()} run produced so a fresh install works fully offline without waiting for
+     * each page to be visited first.
+     *
+     * @param freemarker template engine
+     * @param outputRoot generated site output root; must already contain every other file this
+     *     run will write
+     * @param cacheVersion per-build cache name suffix, so a redeploy's {@code activate} step evicts
+     *     the previous build's cache instead of leaving stale precached files behind
+     */
+    private void writeServiceWorker(Configuration freemarker, Path outputRoot, String cacheVersion)
+            throws IOException, TemplateException {
+        Map<String, Object> data = new HashMap<>();
+        data.put("cacheVersion", cacheVersion);
+        data.put("precacheUrls", collectPrecacheUrls(outputRoot));
+        writeTemplate(freemarker, "sw.ftl", outputRoot.resolve("sw.js"), data);
+    }
+
+    /**
+     * Lists every regular file already written under {@code outputRoot}, as site-relative URLs
+     * (percent-encoded per path segment, matching every other generated link - see
+     * {@link #encodePathSegment(String)}) for the service worker's install-time precache list.
+     *
+     * @param outputRoot generated site output root
+     * @return site-relative URL for every regular file under {@code outputRoot}
+     */
+    private List<String> collectPrecacheUrls(Path outputRoot) throws IOException {
+        List<String> urls = new ArrayList<>();
+        try (var files = Files.walk(outputRoot)) {
+            files.filter(Files::isRegularFile).sorted().forEach(file -> urls.add(toSiteRelativeUrl(outputRoot, file)));
+        }
+        return urls;
+    }
+
+    private static String toSiteRelativeUrl(Path outputRoot, Path file) {
+        Path relative = outputRoot.relativize(file);
+        StringBuilder url = new StringBuilder();
+        for (int i = 0; i < relative.getNameCount(); i++) {
+            if (i > 0) {
+                url.append('/');
+            }
+            url.append(encodePathSegment(relative.getName(i).toString()));
+        }
+        return url.toString();
     }
 
     private GenerationModel buildModel(
@@ -378,9 +433,11 @@ public class GenerateCommand implements Runnable {
      * neither is present (e.g. a local {@code generate} invocation).
      *
      * @param env process environment variables (see {@link System#getenv()})
+     * @param generatedAt this run's generation timestamp (shared with the service worker's cache
+     *     version - see {@link #writeServiceWorker(Configuration, Path, String)})
      * @return template data for {@code build-info.ftl}
      */
-    private Map<String, Object> createBuildInfoData(Map<String, String> env) {
+    private Map<String, Object> createBuildInfoData(Map<String, String> env, String generatedAt) {
         Map<String, Object> data = new HashMap<>();
         data.put("title", "Build Info");
         data.put("pageHeading", "Build Info");
@@ -445,11 +502,7 @@ public class GenerateCommand implements Runnable {
         data.put("workflowName", workflowName);
         data.put("triggeredBy", triggeredBy);
         data.put("eventName", eventName);
-        data.put(
-                "generatedAt",
-                DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.ROOT)
-                        .withZone(ZoneOffset.UTC)
-                        .format(Instant.now()));
+        data.put("generatedAt", generatedAt);
 
         Map<String, String> cliManifestAttributes = readCliManifestAttributes();
         data.put("cliTitle", safe(cliManifestAttributes.get("Implementation-Title")));
