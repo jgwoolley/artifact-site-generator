@@ -27,6 +27,8 @@ A Java CLI that parses release artifacts (VSIX extensions, Maven/JAR artifacts, 
 - `artifact-site-cli` - main executable CLI: plugin loading, parse pipeline, static site generation
 - `artifact-site-plugin-vsix` - VSIX parser plugin
 - `artifact-site-plugin-maven` - Maven/JAR parser plugin
+- `artifact-site-plugin-archetype` - Maven archetype that scaffolds a new parser plugin module (see
+  [New parser plugins](#new-parser-plugins))
 
 The CLI builds as an uberjar via `maven-shade-plugin`. Plugin modules depend on CLI-supplied libraries as `provided`, so the CLI owns the shared runtime version and plugin JARs stay lightweight.
 
@@ -99,6 +101,19 @@ artifact-site-generator generate \
 
 Generated pages support light/dark mode via system preference.
 
+Optionally override the home page's title and the site's favicon:
+
+```sh
+artifact-site-generator generate --title="Acme Registry" --favicon=./acme-icon.svg
+```
+
+- `--title` replaces "Artifact Registry" in the home page's `<title>` and heading only; every other
+  page (parser/artifact/tag pages, build info) keeps its own title unaffected.
+- `--favicon` replaces the bundled default favicon (`assets/favicon.svg`) with the given image (any
+  extension - the MIME type is derived from it). It's used as the browser tab icon and as the header
+  icon next to "Artifact Registry" on every page, and as the fallback icon for any parser or artifact
+  that doesn't supply its own (see [Parser icons](#parser-icons)).
+
 ## XDG paths
 
 - Plugin directory: `${XDG_DATA_HOME:-~/.local/share}/artifact-site-generator/plugins`
@@ -145,6 +160,32 @@ markdown escaped rather than passed through** - READMEs come from arbitrary thir
 keeps a malicious one from injecting a `<script>` or other active content into the generated site. An artifact
 with no README shows a plain "No README was found for this artifact." message instead.
 
+## New parser plugins
+
+`artifact-site-plugin-archetype` generates a new parser plugin module (`ArtifactParser` +
+`ArtifactParserPlugin` skeleton, POM wired for `provided`-scope CLI dependencies, JAR manifest with
+`Plugin-Id`/`Plugin-Version`/`Plugin-Provider`) from the same shape as `artifact-site-plugin-maven` and
+`artifact-site-plugin-vsix`:
+
+```sh
+mvn archetype:generate \
+  -DarchetypeGroupId=com.nf3t \
+  -DarchetypeArtifactId=artifact-site-plugin-archetype \
+  -DarchetypeVersion=0.1.0-SNAPSHOT \
+  -DgroupId=com.example \
+  -DartifactId=artifact-site-plugin-example \
+  -Dpackage=com.example.artifactsite.plugin.example \
+  -DparserId=example \
+  -DparserClassName=Example \
+  -DparserDisplayName="Example Format"
+```
+
+`parserId` is the parser's stable `id()` (written into every parsed artifact's `pluginId` field and used for
+URL routing); `parserClassName` is the PascalCase prefix for the generated `${parserClassName}ArtifactParser`
+/ `${parserClassName}ArtifactParserPlugin` classes; `parserDisplayName` is the UI-facing name. See the
+generated project's own `README.md` for next steps, and the [Plugin API](#plugin-api) section below for the
+contract being implemented.
+
 ## Plugin API
 
 Defined in `artifact-site-plugins-api`:
@@ -179,6 +220,11 @@ name of a classpath resource placed alongside the parser implementation class - 
 method) loads it through the parser class's own classloader, so plugin-supplied icons work the same way inside
 PF4J's isolated plugin classloaders. This is the fallback icon shown for any artifact whose parser doesn't
 supply a more specific one.
+
+If a parser's own icon can't be resolved at all (no `iconResourceName()` declared, the declared resource is
+missing, or the plugin JAR is binary-incompatible with the current plugin API - see `ParserIconCache`),
+`generate` falls back to the site's own favicon (`assets/favicon.svg`, or the image passed to `--favicon`) on
+parser cards, artifact cards, and page headings instead of rendering with no icon.
 
 A parser can also override that default on a **per-artifact** basis by populating
 `ArtifactMetadata.iconData` (base64-encoded icon bytes) and `iconFileName` (the icon's original file name, used
@@ -231,7 +277,9 @@ Rendered from FreeMarker templates in `artifact-site-cli/src/main/resources/temp
 - `build-info.html` - provenance for the generated site: CI/CD provider, source repository/commit link, and
   pipeline/run link, read from GitHub Actions or GitLab CI environment variables at `generate` time (blank on a
   local build with neither set); linked from the "Build Info" link in the header on every page
-- `assets/styles.css`, `assets/app.js`, `assets/logo.svg`
+- `assets/styles.css`, `assets/app.js`, `assets/logo.svg`, `assets/favicon.svg` (also the browser tab icon on
+  every page, and the fallback icon for parsers/artifacts with no icon of their own - see
+  [Parser icons](#parser-icons))
 - `assets/icons/<pluginId>.<ext>` - each parser plugin's default icon, copied from the icons cache
 - `assets/icons/artifacts/<parser-type>/<group-id>.<artifact-id>/<version>.<ext>` - per-artifact icon
   overrides (see [Parser icons](#parser-icons)), written only for artifacts whose parser supplied one

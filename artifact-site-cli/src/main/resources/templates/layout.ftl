@@ -5,7 +5,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>${title?html}</title>
-  <link rel="icon" type="image/svg+xml" href="${rootPath}assets/logo.svg">
+  <link rel="icon" type="${faviconMimeType}" href="${rootPath}${faviconPath}">
   <link rel="stylesheet" href="${rootPath}assets/styles.css">
 </head>
 <body class="page<#if bodyClass?has_content> ${bodyClass}</#if>" data-root-path="${rootPath}">
@@ -17,7 +17,7 @@
   </#if>
   <header class="top-nav">
     <a class="brand" href="${rootPath}index.html">
-      <img src="${rootPath}assets/logo.svg" alt="Artifact Site" width="28" height="28">
+      <img src="${rootPath}${faviconPath}" alt="Artifact Site" width="28" height="28">
       <span>Artifact Registry</span>
     </a>
     <div class="search-wrap">

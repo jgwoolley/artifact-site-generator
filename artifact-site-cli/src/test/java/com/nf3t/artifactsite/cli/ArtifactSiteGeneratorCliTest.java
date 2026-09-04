@@ -355,6 +355,94 @@ class ArtifactSiteGeneratorCliTest {
         assertThat(searchIndex.get(0)).containsEntry("version", "2.0.0");
     }
 
+    /**
+     * A parser plugin with no cached icon (e.g. it declared no {@code iconResourceName()}, or its
+     * icon failed to load) must fall back to the site's default icon rather than rendering with no
+     * icon at all.
+     */
+    @Test
+    void generateFallsBackToDefaultIconForParserWithNoCachedIcon() throws IOException {
+        Path artifactJson = tempDir.resolve("artifacts.json");
+        Path outputDir = tempDir.resolve("public");
+
+        com.nf3t.artifactsite.api.ArtifactMetadata artifact = new com.nf3t.artifactsite.api.ArtifactMetadata();
+        artifact.setPluginId("no-icon-parser-" + System.nanoTime());
+        artifact.setGroupId("acme");
+        artifact.setArtifactId("demo");
+        artifact.setArtifactName("Acme Demo");
+        artifact.setVersion("1.0.0");
+        artifact.setSourceType("remote");
+        artifact.setSourceValue("https://example.com/acme-demo-1.0.0.jar");
+        artifact.setDownloadUrl("https://example.com/acme-demo-1.0.0.jar");
+
+        OBJECT_MAPPER.writeValue(artifactJson.toFile(), List.of(artifact));
+
+        int exitCode = new CommandLine(new ArtifactSiteGeneratorCli())
+                .execute("--artifact-json", artifactJson.toString(), "generate", "--output", outputDir.toString());
+
+        assertThat(exitCode).isZero();
+        assertThat(Files.exists(outputDir.resolve("assets/favicon.svg"))).isTrue();
+
+        String rootIndex = Files.readString(outputDir.resolve("index.html"));
+        assertThat(rootIndex).contains("class=\"card-icon\" src=\"assets/favicon.svg\"");
+    }
+
+    /**
+     * {@code --title} replaces "Artifact Registry" in the home page's {@code <title>}/heading only
+     * - child pages (parser index, in this case) keep their own titles unaffected. {@code --favicon}
+     * replaces the default favicon everywhere: the home page's {@code <link rel="icon">}, the header
+     * icon next to the brand text (shared by every page, including the child page), and its MIME
+     * type is derived from the custom file's extension.
+     */
+    @Test
+    void generateAppliesCustomTitleToHomePageOnlyAndCustomFaviconEverywhere() throws IOException {
+        Path artifactJson = tempDir.resolve("artifacts.json");
+        Path outputDir = tempDir.resolve("public");
+        Path customFavicon = tempDir.resolve("custom-favicon.png");
+        Files.writeString(customFavicon, "fake-png-bytes");
+
+        String parserId = "custom-title-parser-" + System.nanoTime();
+        com.nf3t.artifactsite.api.ArtifactMetadata artifact = new com.nf3t.artifactsite.api.ArtifactMetadata();
+        artifact.setPluginId(parserId);
+        artifact.setGroupId("acme");
+        artifact.setArtifactId("demo");
+        artifact.setArtifactName("Acme Demo");
+        artifact.setVersion("1.0.0");
+        artifact.setSourceType("remote");
+        artifact.setSourceValue("https://example.com/acme-demo-1.0.0.jar");
+        artifact.setDownloadUrl("https://example.com/acme-demo-1.0.0.jar");
+
+        OBJECT_MAPPER.writeValue(artifactJson.toFile(), List.of(artifact));
+
+        int exitCode = new CommandLine(new ArtifactSiteGeneratorCli())
+                .execute(
+                        "--artifact-json",
+                        artifactJson.toString(),
+                        "generate",
+                        "--output",
+                        outputDir.toString(),
+                        "--title",
+                        "Acme Registry",
+                        "--favicon",
+                        customFavicon.toString());
+
+        assertThat(exitCode).isZero();
+
+        Path faviconAsset = outputDir.resolve("assets/favicon.png");
+        assertThat(Files.readString(faviconAsset)).isEqualTo("fake-png-bytes");
+
+        String rootIndex = Files.readString(outputDir.resolve("index.html"));
+        assertThat(rootIndex).contains("<title>Acme Registry</title>");
+        assertThat(rootIndex).contains("<h1>Acme Registry</h1>");
+        assertThat(rootIndex).contains("<link rel=\"icon\" type=\"image/png\" href=\"assets/favicon.png\">");
+        assertThat(rootIndex).contains("<img src=\"assets/favicon.png\" alt=\"Artifact Site\"");
+
+        String parserIndex = Files.readString(outputDir.resolve("artifacts").resolve(parserId).resolve("index.html"));
+        assertThat(parserIndex).doesNotContain("Acme Registry");
+        assertThat(parserIndex).contains("<link rel=\"icon\" type=\"image/png\" href=\"../../assets/favicon.png\">");
+        assertThat(parserIndex).contains("<img src=\"../../assets/favicon.png\" alt=\"Artifact Site\"");
+    }
+
     // @Test
     void remoteRequestConfigIsPersistedOutsideArtifactsJson() {
         String originalUserHome = System.getProperty("user.home");

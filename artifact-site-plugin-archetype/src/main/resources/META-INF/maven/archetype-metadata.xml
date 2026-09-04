@@ -1,0 +1,58 @@
+<archetype-descriptor xmlns="http://maven.apache.org/plugins/maven-archetype-plugin/archetype-descriptor/1.1.0"
+                      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                      xsi:schemaLocation="http://maven.apache.org/plugins/maven-archetype-plugin/archetype-descriptor/1.1.0 http://maven.apache.org/xsd/archetype-descriptor-1.1.0.xsd"
+                      name="artifact-site-plugin">
+  <requiredProperties>
+    <!-- Stable ArtifactParser id: written into every parsed artifact's pluginId, and drives
+         /artifacts/<id>/... URL routing. Keep it short, lowercase, and stable once released. -->
+    <requiredProperty key="parserId">
+      <defaultValue>example</defaultValue>
+    </requiredProperty>
+    <!-- PascalCase prefix used for the generated class names, e.g. "Npm" -> NpmArtifactParser. -->
+    <requiredProperty key="parserClassName">
+      <defaultValue>Example</defaultValue>
+    </requiredProperty>
+    <!-- Human-readable name shown in the UI (parser cards, page headings, search results). -->
+    <requiredProperty key="parserDisplayName">
+      <defaultValue>Example</defaultValue>
+    </requiredProperty>
+    <!-- Recorded as the Plugin-Provider manifest entry in the built plugin JAR. -->
+    <requiredProperty key="pluginProvider">
+      <defaultValue>acme</defaultValue>
+    </requiredProperty>
+    <!-- artifact-site-plugins-api version this plugin is built against. -->
+    <requiredProperty key="artifactSiteApiVersion">
+      <defaultValue>0.1.0-SNAPSHOT</defaultValue>
+    </requiredProperty>
+    <!-- pf4j version this plugin is built against; must match the CLI's runtime pf4j version. -->
+    <requiredProperty key="pf4jVersion">
+      <defaultValue>3.12.0</defaultValue>
+    </requiredProperty>
+  </requiredProperties>
+  <fileSets>
+    <fileSet filtered="true" packaged="false" encoding="UTF-8">
+      <directory></directory>
+      <includes>
+        <include>README.md</include>
+      </includes>
+    </fileSet>
+    <fileSet filtered="true" packaged="true" encoding="UTF-8">
+      <directory>src/main/java</directory>
+      <includes>
+        <include>**/*.java</include>
+      </includes>
+    </fileSet>
+    <fileSet filtered="true" packaged="true" encoding="UTF-8">
+      <directory>src/main/resources</directory>
+      <includes>
+        <include>**/*</include>
+      </includes>
+    </fileSet>
+    <fileSet filtered="true" packaged="true" encoding="UTF-8">
+      <directory>src/test/java</directory>
+      <includes>
+        <include>**/*.java</include>
+      </includes>
+    </fileSet>
+  </fileSets>
+</archetype-descriptor>

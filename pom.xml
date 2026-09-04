@@ -21,6 +21,7 @@
     <module>artifact-site-cli</module>
     <module>artifact-site-plugin-vsix</module>
     <module>artifact-site-plugin-maven</module>
+    <module>artifact-site-plugin-archetype</module>
   </modules>
 
   <properties>

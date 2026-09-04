@@ -57,12 +57,34 @@ public class GenerateCommand implements Runnable {
     // source (rather than passing it through) keeps a malicious README from injecting a
     // <script> or other active content into the generated site.
     private static final HtmlRenderer MARKDOWN_RENDERER = HtmlRenderer.builder().escapeHtml(true).build();
+    private static final String DEFAULT_FAVICON_ASSET_PATH = "assets/favicon.svg";
+    private static final String DEFAULT_FAVICON_MIME_TYPE = "image/svg+xml";
 
     @ParentCommand
     private ArtifactSiteGeneratorCli parentCommand;
 
     @Option(names = "--output", description = "Output directory for generated static site", defaultValue = "./public")
     private Path outputDir;
+
+    @Option(
+            names = "--title",
+            description = "Optional custom site title shown on the home page in place of \"Artifact Registry\" "
+                    + "(child pages keep their own titles)")
+    private String siteTitle;
+
+    @Option(
+            names = "--favicon",
+            description = "Optional path to a custom favicon image replacing the bundled default; used as the "
+                    + "browser tab icon and header icon on every page, and as the fallback icon for any "
+                    + "parser/artifact with no icon of its own")
+    private Path faviconOverride;
+
+    // Effective favicon for this generate() run: the site-root-relative asset path (e.g.
+    // "assets/favicon.svg") and its MIME type, resolved by copyFavicon() from --favicon or the
+    // bundled default. Used both for the site's own <link rel="icon">/header icon and as the
+    // fallback icon for any parser/artifact that doesn't supply its own.
+    private String faviconAssetPath = DEFAULT_FAVICON_ASSET_PATH;
+    private String faviconMimeType = DEFAULT_FAVICON_MIME_TYPE;
 
     @Option(names = "--bannerText", description = "Optional banner text displayed at the top of every generated page")
     private String bannerText;
@@ -105,6 +127,7 @@ public class GenerateCommand implements Runnable {
         copyAsset("assets/styles.css", outputRoot.resolve("assets/styles.css"));
         copyAsset("assets/app.js", outputRoot.resolve("assets/app.js"));
         copyAsset("assets/logo.svg", outputRoot.resolve("assets/logo.svg"));
+        copyFavicon(outputRoot);
 
         Map<String, String> parserIconUrls = copyParserIcons(parentCommand.iconsDir(), outputRoot);
         Map<String, String> parserDisplayNames = readStringMapCache(parentCommand.parserDisplayNamesPath());
@@ -123,7 +146,7 @@ public class GenerateCommand implements Runnable {
             parserData.put("pageHeading", parserGroup.parserDisplayName() + " Artifacts");
             parserData.put("pageDescription", "Latest artifacts parsed by " + parserGroup.parserDisplayName());
             parserData.put("rootPath", relativeRootPath(parserIndexPath, outputRoot));
-            parserData.put("pageIcon", parserIconUrls.getOrDefault(parserGroup.parserName(), ""));
+            parserData.put("pageIcon", parserIconUrls.getOrDefault(parserGroup.parserName(), defaultIconUrl()));
             parserData.put("artifactCards", parserGroup.latestArtifacts());
             writeTemplate(freemarker, "index.ftl", parserIndexPath, parserData);
 
@@ -224,7 +247,7 @@ public class GenerateCommand implements Runnable {
                 String latestVersionSegment = toPathSegment(safe(latest.getVersion()));
                 String detailUrl = toArtifactDetailUrl(parserSegment, artifactSegment, latestVersionSegment);
 
-                String parserIconUrl = parserIconUrls.getOrDefault(parserName, "");
+                String parserIconUrl = parserIconUrls.getOrDefault(parserName, defaultIconUrl());
                 String latestIconUrl = resolveArtifactIconUrl(
                         latest, parserIconUrl, outputRoot, parserSegment, artifactSegment, latestVersionSegment);
                 Map<String, Object> latestCard = createArtifactCard(latest, parserDisplayName, detailUrl, latestIconUrl);
@@ -303,13 +326,14 @@ public class GenerateCommand implements Runnable {
             parserSummary.put("parserName", parserGroup.parserDisplayName());
             parserSummary.put("artifactCount", parserGroup.latestArtifacts().size());
             parserSummary.put("url", "/artifacts/" + parserGroup.parserSegment() + "/index.html");
-            parserSummary.put("icon", parserIconUrls.getOrDefault(parserGroup.parserName(), ""));
+            parserSummary.put("icon", parserIconUrls.getOrDefault(parserGroup.parserName(), defaultIconUrl()));
             parserSummaries.add(parserSummary);
         }
 
+        String homePageTitle = isBlank(siteTitle) ? "Artifact Registry" : siteTitle;
         Map<String, Object> modelData = new HashMap<>();
-        modelData.put("title", "Artifact Registry");
-        modelData.put("pageHeading", "Artifact Registry");
+        modelData.put("title", homePageTitle);
+        modelData.put("pageHeading", homePageTitle);
         modelData.put("pageDescription", "Browse generated artifacts by parser, tag, and version");
         modelData.put("rootPath", "");
         modelData.put("parserSummaries", parserSummaries);
@@ -430,6 +454,8 @@ public class GenerateCommand implements Runnable {
         pageData.put("bannerBackgroundColorDark", safe(bannerBackgroundColorDark));
         pageData.put("bannerTextColorLight", safe(bannerTextColorLight));
         pageData.put("bannerBackgroundColorLight", safe(bannerBackgroundColorLight));
+        pageData.put("faviconPath", faviconAssetPath);
+        pageData.put("faviconMimeType", faviconMimeType);
     }
 
     private void writeSearchIndex(Path outputPath, List<Map<String, Object>> searchEntries) throws IOException {
@@ -500,6 +526,61 @@ public class GenerateCommand implements Runnable {
             }
             Files.copy(in, destination, StandardCopyOption.REPLACE_EXISTING);
         }
+    }
+
+    /**
+     * Resolves the effective favicon for this {@code generate()} run - a custom image from
+     * {@code --favicon} when given and readable, the bundled default otherwise - copies it into
+     * the generated site, and records its site-relative asset path and MIME type in
+     * {@link #faviconAssetPath} / {@link #faviconMimeType} for use in every page's
+     * {@code <link rel="icon">}/header icon (see {@link #applyGlobalTemplateOptions(Map)}) and as
+     * the fallback icon for any parser/artifact with none of its own (see {@link #defaultIconUrl()}).
+     *
+     * @param outputRoot generated site output root
+     */
+    private void copyFavicon(Path outputRoot) throws IOException {
+        if (faviconOverride != null) {
+            if (!Files.isRegularFile(faviconOverride)) {
+                LOGGER.warn("Favicon override '{}' does not exist; using the default favicon.", faviconOverride);
+            } else {
+                String extension = PathUtils.getExtension(faviconOverride);
+                String fileName = "favicon" + (isBlank(extension) ? "" : "." + extension);
+                Path destination = outputRoot.resolve("assets").resolve(fileName);
+                Files.createDirectories(destination.getParent());
+                Files.copy(faviconOverride, destination, StandardCopyOption.REPLACE_EXISTING);
+                faviconAssetPath = "assets/" + fileName;
+                faviconMimeType = faviconMimeType(extension);
+                return;
+            }
+        }
+
+        faviconAssetPath = DEFAULT_FAVICON_ASSET_PATH;
+        faviconMimeType = DEFAULT_FAVICON_MIME_TYPE;
+        copyAsset(DEFAULT_FAVICON_ASSET_PATH, outputRoot.resolve(DEFAULT_FAVICON_ASSET_PATH));
+    }
+
+    /** Maps a favicon file extension to its MIME type, defaulting to a generic icon type. */
+    private static String faviconMimeType(@Nullable String extension) {
+        if (isBlank(extension)) {
+            return "image/x-icon";
+        }
+        return switch (extension.toLowerCase(Locale.ROOT)) {
+            case "svg" -> "image/svg+xml";
+            case "png" -> "image/png";
+            case "jpg", "jpeg" -> "image/jpeg";
+            case "gif" -> "image/gif";
+            case "webp" -> "image/webp";
+            default -> "image/x-icon";
+        };
+    }
+
+    /**
+     * Site-relative URL (with leading slash, matching {@code parserIconUrls}' convention) of the
+     * effective favicon resolved by {@link #copyFavicon(Path)} - shown for any parser/artifact
+     * that doesn't supply its own icon.
+     */
+    private String defaultIconUrl() {
+        return "/" + faviconAssetPath;
     }
 
     /**
