@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Base64;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -441,6 +442,98 @@ class ArtifactSiteGeneratorCliTest {
         assertThat(parserIndex).doesNotContain("Acme Registry");
         assertThat(parserIndex).contains("<link rel=\"icon\" type=\"image/png\" href=\"../../assets/favicon.png\">");
         assertThat(parserIndex).contains("<img src=\"../../assets/favicon.png\" alt=\"Artifact Site\"");
+    }
+
+    /**
+     * The generated site is a basic PWA: a {@code manifest.webmanifest} naming the effective home
+     * page title and pointing at the effective favicon, and a registered {@code sw.js} at the site
+     * root. Every page also carries baseline SEO meta tags, and an artifact detail page's {@code
+     * <meta name="keywords">} must include that artifact's own tags (on top of any parser-level
+     * SEO tags - see {@code ArtifactParser#seoTags()}, covered separately by
+     * {@code ParserSeoTagsCacheTest}).
+     */
+    @Test
+    void generateWritesPwaManifestServiceWorkerAndArtifactKeywords() throws IOException {
+        Path artifactJson = tempDir.resolve("artifacts.json");
+        Path outputDir = tempDir.resolve("public");
+
+        com.nf3t.artifactsite.api.ArtifactMetadata artifact = new com.nf3t.artifactsite.api.ArtifactMetadata();
+        artifact.setPluginId("seo-test-parser-" + System.nanoTime());
+        artifact.setGroupId("acme");
+        artifact.setArtifactId("demo");
+        artifact.setArtifactName("Acme Demo");
+        artifact.setVersion("1.0.0");
+        artifact.setDescription("A demo artifact");
+        artifact.setTags(List.of("etl", "catalog"));
+        artifact.setSourceType("remote");
+        artifact.setSourceValue("https://example.com/acme-demo-1.0.0.jar");
+        artifact.setDownloadUrl("https://example.com/acme-demo-1.0.0.jar");
+
+        OBJECT_MAPPER.writeValue(artifactJson.toFile(), List.of(artifact));
+
+        int exitCode = new CommandLine(new ArtifactSiteGeneratorCli())
+                .execute("--artifact-json", artifactJson.toString(), "generate", "--output", outputDir.toString());
+
+        assertThat(exitCode).isZero();
+        assertThat(Files.exists(outputDir.resolve("sw.js"))).isTrue();
+
+        Map<String, Object> manifest = OBJECT_MAPPER.readValue(
+                outputDir.resolve("manifest.webmanifest").toFile(),
+                OBJECT_MAPPER.getTypeFactory().constructMapType(Map.class, String.class, Object.class));
+        assertThat(manifest).containsEntry("name", "Artifact Registry");
+        assertThat(manifest).containsEntry("display", "standalone");
+
+        String rootIndex = Files.readString(outputDir.resolve("index.html"));
+        assertThat(rootIndex).contains("<link rel=\"manifest\" href=\"manifest.webmanifest\">");
+        assertThat(rootIndex).contains("<meta name=\"description\" content=\"Browse generated artifacts");
+        assertThat(rootIndex).contains("<meta property=\"og:title\" content=\"Artifact Registry\">");
+
+        String detailPage = Files.readString(
+                outputDir.resolve("artifacts")
+                        .resolve(artifact.getPluginId())
+                        .resolve("acme.demo")
+                        .resolve("1.0.0")
+                        .resolve("index.html"));
+        assertThat(detailPage).contains("<meta name=\"keywords\" content=\"etl, catalog\">");
+    }
+
+    /**
+     * A tag page lists artifacts from potentially many different parsers/icons, but its own
+     * {@code og:image}/{@code twitter:image} (and visible page-heading icon) must still use a
+     * concrete artifact icon - here, the tagged artifact's own per-artifact icon - rather than
+     * falling back to the generic site favicon, matching artifact/parser index pages.
+     */
+    @Test
+    void generateUsesArtifactIconForTagPageSocialImage() throws IOException {
+        Path artifactJson = tempDir.resolve("artifacts.json");
+        Path outputDir = tempDir.resolve("public");
+        String tag = "demo-tag-" + System.nanoTime();
+
+        com.nf3t.artifactsite.api.ArtifactMetadata artifact = new com.nf3t.artifactsite.api.ArtifactMetadata();
+        artifact.setPluginId("tag-icon-parser-" + System.nanoTime());
+        artifact.setGroupId("acme");
+        artifact.setArtifactId("demo");
+        artifact.setArtifactName("Acme Demo");
+        artifact.setVersion("1.0.0");
+        artifact.setTags(List.of(tag));
+        artifact.setSourceType("remote");
+        artifact.setSourceValue("https://example.com/acme-demo-1.0.0.jar");
+        artifact.setDownloadUrl("https://example.com/acme-demo-1.0.0.jar");
+        artifact.setIconData(Base64.getEncoder().encodeToString("fake-png-bytes".getBytes()));
+        artifact.setIconFileName("icon.png");
+
+        OBJECT_MAPPER.writeValue(artifactJson.toFile(), List.of(artifact));
+
+        int exitCode = new CommandLine(new ArtifactSiteGeneratorCli())
+                .execute("--artifact-json", artifactJson.toString(), "generate", "--output", outputDir.toString());
+
+        assertThat(exitCode).isZero();
+
+        String tagPage = Files.readString(outputDir.resolve("tags").resolve(tag).resolve("index.html"));
+        String expectedIconPath = "../../assets/icons/artifacts/" + artifact.getPluginId() + "/acme.demo/1.0.0.png";
+        assertThat(tagPage).contains("<meta property=\"og:image\" content=\"" + expectedIconPath + "\">");
+        assertThat(tagPage).contains("<meta name=\"twitter:image\" content=\"" + expectedIconPath + "\">");
+        assertThat(tagPage).contains("class=\"page-icon\" src=\"" + expectedIconPath + "\"");
     }
 
     // @Test

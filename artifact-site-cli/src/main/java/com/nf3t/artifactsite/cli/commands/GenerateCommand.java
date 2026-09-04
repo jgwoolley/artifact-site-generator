@@ -127,26 +127,38 @@ public class GenerateCommand implements Runnable {
         copyAsset("assets/styles.css", outputRoot.resolve("assets/styles.css"));
         copyAsset("assets/app.js", outputRoot.resolve("assets/app.js"));
         copyAsset("assets/logo.svg", outputRoot.resolve("assets/logo.svg"));
+        copyAsset("sw.js", outputRoot.resolve("sw.js"));
         copyFavicon(outputRoot);
+
+        String homePageTitle = isBlank(siteTitle) ? "Artifact Registry" : siteTitle;
+        writeManifest(outputRoot, homePageTitle);
 
         Map<String, String> parserIconUrls = copyParserIcons(parentCommand.iconsDir(), outputRoot);
         Map<String, String> parserDisplayNames = readStringMapCache(parentCommand.parserDisplayNamesPath());
         Map<String, String> parserInstallGuides = readStringMapCache(parentCommand.parserInstallGuidesPath());
-        GenerationModel model = buildModel(artifactCatalog, outputRoot, parserIconUrls, parserDisplayNames, parserInstallGuides);
+        Map<String, List<String>> parserSeoTags = readListMapCache(parentCommand.parserSeoTagsPath());
+        GenerationModel model =
+                buildModel(artifactCatalog, outputRoot, parserIconUrls, parserDisplayNames, parserInstallGuides, parserSeoTags);
         writeSearchIndex(outputRoot.resolve("search-index.json"), model.searchIndexEntries());
 
         Configuration freemarker = createFreemarkerConfiguration();
-        writeTemplate(freemarker, "index.ftl", outputRoot.resolve("index.html"), createRootIndexData(model, parserIconUrls));
+        writeTemplate(
+                freemarker,
+                "index.ftl",
+                outputRoot.resolve("index.html"),
+                createRootIndexData(model, parserIconUrls, homePageTitle));
         writeTemplate(freemarker, "build-info.ftl", outputRoot.resolve("build-info.html"), createBuildInfoData(System.getenv()));
 
         for (ParserGroup parserGroup : model.parserGroups()) {
             Path parserIndexPath = outputRoot.resolve("artifacts").resolve(parserGroup.parserSegment()).resolve("index.html");
+            List<String> parserKeywords = parserSeoTags.getOrDefault(parserGroup.parserName(), List.of());
             Map<String, Object> parserData = new HashMap<>();
             parserData.put("title", parserGroup.parserDisplayName() + " Artifacts");
             parserData.put("pageHeading", parserGroup.parserDisplayName() + " Artifacts");
             parserData.put("pageDescription", "Latest artifacts parsed by " + parserGroup.parserDisplayName());
             parserData.put("rootPath", relativeRootPath(parserIndexPath, outputRoot));
             parserData.put("pageIcon", parserIconUrls.getOrDefault(parserGroup.parserName(), defaultIconUrl()));
+            parserData.put("pageKeywords", String.join(", ", combineKeywords(List.of(parserGroup.parserDisplayName()), parserKeywords)));
             parserData.put("artifactCards", parserGroup.latestArtifacts());
             writeTemplate(freemarker, "index.ftl", parserIndexPath, parserData);
 
@@ -169,6 +181,7 @@ public class GenerateCommand implements Runnable {
                                 : latestDescription);
                 artifactData.put("rootPath", relativeRootPath(artifactIndexPath, outputRoot));
                 artifactData.put("pageIcon", latestDetailPage.get("pageIcon"));
+                artifactData.put("pageKeywords", latestDetailPage.get("pageKeywords"));
                 artifactData.put("versions", artifactGroup.versionRows());
                 writeTemplate(freemarker, "index.ftl", artifactIndexPath, artifactData);
 
@@ -187,13 +200,18 @@ public class GenerateCommand implements Runnable {
 
         for (Map.Entry<String, List<Map<String, Object>>> tagEntry : model.tagCards().entrySet()) {
             String tag = tagEntry.getKey();
+            List<Map<String, Object>> tagArtifactCards = tagEntry.getValue();
             Path tagPath = outputRoot.resolve("tags").resolve(toPathSegment(tag)).resolve("index.html");
             Map<String, Object> tagData = new HashMap<>();
             tagData.put("title", "Tag: " + tag);
             tagData.put("pageHeading", "Tag: " + tag);
             tagData.put("pageDescription", "Artifacts tagged with “" + tag + "”");
             tagData.put("rootPath", relativeRootPath(tagPath, outputRoot));
-            tagData.put("artifactCards", tagEntry.getValue());
+            tagData.put("pageKeywords", tag);
+            tagData.put(
+                    "pageIcon",
+                    tagArtifactCards.isEmpty() ? "" : tagArtifactCards.get(0).get("icon"));
+            tagData.put("artifactCards", tagArtifactCards);
             writeTemplate(freemarker, "tag.ftl", tagPath, tagData);
         }
     }
@@ -203,7 +221,8 @@ public class GenerateCommand implements Runnable {
             Path outputRoot,
             Map<String, String> parserIconUrls,
             Map<String, String> parserDisplayNames,
-            Map<String, String> parserInstallGuides)
+            Map<String, String> parserInstallGuides,
+            Map<String, List<String>> parserSeoTags)
             throws IOException {
         Map<String, Map<String, List<ArtifactMetadata>>> grouped = new LinkedHashMap<>();
 
@@ -232,6 +251,7 @@ public class GenerateCommand implements Runnable {
             String parserSegment = toPathSegment(parserName);
             String parserDisplayName = parserDisplayNames.getOrDefault(parserName, parserName);
             String installGuideTemplate = parserInstallGuides.get(parserName);
+            List<String> parserKeywords = parserSeoTags.getOrDefault(parserName, List.of());
             List<ArtifactGroup> artifactGroups = new ArrayList<>();
             List<Map<String, Object>> latestArtifacts = new ArrayList<>();
 
@@ -300,6 +320,8 @@ public class GenerateCommand implements Runnable {
                     detailPage.put("installGuideHtml", renderInstallGuide(installGuideTemplate, version));
                     detailPage.put("tags", normalizeTags(version.getTags()));
                     detailPage.put("authors", normalizeTags(version.getAuthors()));
+                    detailPage.put(
+                            "pageKeywords", String.join(", ", combineKeywords(version.getTags(), parserKeywords)));
                     detailPages.add(detailPage);
                 }
 
@@ -319,8 +341,10 @@ public class GenerateCommand implements Runnable {
         return new GenerationModel(parserGroups, allLatestArtifactCards, searchEntries, tagCards);
     }
 
-    private Map<String, Object> createRootIndexData(GenerationModel model, Map<String, String> parserIconUrls) {
+    private Map<String, Object> createRootIndexData(
+            GenerationModel model, Map<String, String> parserIconUrls, String homePageTitle) {
         List<Map<String, Object>> parserSummaries = new ArrayList<>();
+        List<String> parserDisplayNames = new ArrayList<>();
         for (ParserGroup parserGroup : model.parserGroups()) {
             Map<String, Object> parserSummary = new HashMap<>();
             parserSummary.put("parserName", parserGroup.parserDisplayName());
@@ -328,14 +352,15 @@ public class GenerateCommand implements Runnable {
             parserSummary.put("url", "/artifacts/" + parserGroup.parserSegment() + "/index.html");
             parserSummary.put("icon", parserIconUrls.getOrDefault(parserGroup.parserName(), defaultIconUrl()));
             parserSummaries.add(parserSummary);
+            parserDisplayNames.add(parserGroup.parserDisplayName());
         }
 
-        String homePageTitle = isBlank(siteTitle) ? "Artifact Registry" : siteTitle;
         Map<String, Object> modelData = new HashMap<>();
         modelData.put("title", homePageTitle);
         modelData.put("pageHeading", homePageTitle);
         modelData.put("pageDescription", "Browse generated artifacts by parser, tag, and version");
         modelData.put("rootPath", "");
+        modelData.put("pageKeywords", String.join(", ", combineKeywords(parserDisplayNames, List.of())));
         modelData.put("parserSummaries", parserSummaries);
         modelData.put("artifactCards", model.allLatestArtifactCards());
         return modelData;
@@ -516,6 +541,59 @@ public class GenerateCommand implements Runnable {
             LOGGER.warn("Failed to read parser cache at " + cachePath, e);
             return Map.of();
         }
+    }
+
+    /**
+     * Reads a parser id -> string-list JSON cache file (see {@code ParserSeoTagsCache}),
+     * populated by {@code parse}. Falls back to an empty map when the cache is missing or
+     * unreadable, so callers should fall back to an empty keyword list per parser.
+     *
+     * @param cachePath parser id -> string-list cache file populated by {@code parse}
+     * @return cached value by parser id
+     */
+    private Map<String, List<String>> readListMapCache(Path cachePath) {
+        if (!Files.isRegularFile(cachePath)) {
+            return Map.of();
+        }
+        try (InputStream input = Files.newInputStream(cachePath)) {
+            Map<String, List<String>> values =
+                    OBJECT_MAPPER.readValue(input, new TypeReference<Map<String, List<String>>>() {
+                    });
+            return values == null ? Map.of() : values;
+        } catch (IOException e) {
+            LOGGER.warn("Failed to read parser cache at " + cachePath, e);
+            return Map.of();
+        }
+    }
+
+    /**
+     * Writes the site's PWA web manifest, naming it after the effective home page title and
+     * pointing its icon at the effective favicon (see {@link #copyFavicon(Path)}), so both stay in
+     * sync with {@code --title}/{@code --favicon}.
+     *
+     * @param outputRoot generated site output root
+     * @param homePageTitle effective home page title (default or {@code --title})
+     */
+    private void writeManifest(Path outputRoot, String homePageTitle) throws IOException {
+        Map<String, Object> icon = new LinkedHashMap<>();
+        icon.put("src", faviconAssetPath);
+        icon.put("sizes", "any");
+        icon.put("type", faviconMimeType);
+        icon.put("purpose", "any");
+
+        Map<String, Object> manifest = new LinkedHashMap<>();
+        manifest.put("name", homePageTitle);
+        manifest.put("short_name", homePageTitle);
+        manifest.put("description", "Browse generated artifacts by parser, tag, and version");
+        manifest.put("start_url", ".");
+        manifest.put("scope", ".");
+        manifest.put("display", "standalone");
+        manifest.put("background_color", "#ffffff");
+        manifest.put("theme_color", "#2563eb");
+        manifest.put("icons", List.of(icon));
+
+        OBJECT_MAPPER.writerWithDefaultPrettyPrinter()
+                .writeValue(outputRoot.resolve("manifest.webmanifest").toFile(), manifest);
     }
 
     private void copyAsset(String classpathResource, Path destination) throws IOException {
@@ -720,6 +798,26 @@ public class GenerateCommand implements Runnable {
             }
         }
         return new ArrayList<>(normalized);
+    }
+
+    /**
+     * Combines an artifact's own tags with its parser's declared SEO keywords (see
+     * {@code ArtifactParser#seoTags()}) for a page's {@code <meta name="keywords">}, deduplicated
+     * and trimmed, artifact tags first.
+     *
+     * @param artifactTags the artifact's own tags, or {@code null}
+     * @param parserKeywords the owning parser's declared SEO keywords, or {@code null}
+     * @return combined, deduplicated keyword list
+     */
+    private static List<String> combineKeywords(@Nullable List<String> artifactTags, @Nullable List<String> parserKeywords) {
+        List<String> combined = new ArrayList<>();
+        if (artifactTags != null) {
+            combined.addAll(artifactTags);
+        }
+        if (parserKeywords != null) {
+            combined.addAll(parserKeywords);
+        }
+        return normalizeTags(combined);
     }
 
     private static String toArtifactDetailUrl(String parserSegment, String artifactSegment, String versionSegment) {

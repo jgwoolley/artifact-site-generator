@@ -89,4 +89,17 @@ public final class XdgPaths {
         }
         return Path.of(dataHome, "artifact-site-generator", "parser-install-guides.json");
     }
+
+    /**
+     * Returns the path of the cached JSON map of parser id to SEO keywords.
+     *
+     * @return parser SEO tags cache file path
+     */
+    public static Path parserSeoTagsPath() {
+        String dataHome = System.getenv("XDG_DATA_HOME");
+        if (dataHome == null || dataHome.isBlank()) {
+            dataHome = Path.of(System.getProperty("user.home"), ".local", "share").toString();
+        }
+        return Path.of(dataHome, "artifact-site-generator", "parser-seo-tags.json");
+    }
 }

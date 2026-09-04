@@ -1,6 +1,7 @@
 package com.nf3t.artifactsite.api;
 
 import java.io.InputStream;
+import java.util.List;
 
 import org.jspecify.annotations.Nullable;
 
@@ -91,5 +92,17 @@ public interface ArtifactParser {
     default @Nullable InputStream openInstallGuideStream() {
         String resourceName = installGuideResourceName();
         return resourceName == null ? null : getClass().getResourceAsStream(resourceName);
+    }
+
+    /**
+     * Returns additional SEO keywords this parser wants included on the {@code <meta
+     * name="keywords">} tag of every page it appears on (e.g. format-specific terms like {@code
+     * "maven"} or {@code "vscode"}), on top of each individual artifact's own {@link
+     * ArtifactMetadata#getTags()}. Returns an empty list by default.
+     *
+     * @return parser-level SEO keywords, never {@code null}
+     */
+    default List<String> seoTags() {
+        return List.of();
     }
 }

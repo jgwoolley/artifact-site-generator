@@ -111,8 +111,13 @@ artifact-site-generator generate --title="Acme Registry" --favicon=./acme-icon.s
   page (parser/artifact/tag pages, build info) keeps its own title unaffected.
 - `--favicon` replaces the bundled default favicon (`assets/favicon.svg`) with the given image (any
   extension - the MIME type is derived from it). It's used as the browser tab icon and as the header
-  icon next to "Artifact Registry" on every page, and as the fallback icon for any parser or artifact
-  that doesn't supply its own (see [Parser icons](#parser-icons)).
+  icon next to "Artifact Registry" on every page, the fallback icon for any parser or artifact that
+  doesn't supply its own (see [Parser icons](#parser-icons)), and the site's PWA manifest icon (see
+  [Progressive Web App](#progressive-web-app)).
+
+Both also feed the generated `manifest.webmanifest` (`--title` as its `name`/`short_name`, `--favicon` as its
+icon), so the site's installed name/icon (see [Progressive Web App](#progressive-web-app)) stays in sync with
+the home page and header.
 
 ## XDG paths
 
@@ -123,6 +128,7 @@ artifact-site-generator generate --title="Acme Registry" --favicon=./acme-icon.s
 - Parser icon cache: `${XDG_DATA_HOME:-~/.local/share}/artifact-site-generator/icons`
 - Parser display name cache: `${XDG_DATA_HOME:-~/.local/share}/artifact-site-generator/parser-display-names.json`
 - Parser install guide cache: `${XDG_DATA_HOME:-~/.local/share}/artifact-site-generator/parser-install-guides.json`
+- Parser SEO tags cache: `${XDG_DATA_HOME:-~/.local/share}/artifact-site-generator/parser-seo-tags.json`
 - Generated static site: `./public` by default (override with `--output`)
 
 ## Data model
@@ -193,7 +199,7 @@ Defined in `artifact-site-plugins-api`:
 - `ArtifactParserPlugin` - PF4J extension point: `pluginId()`, `parser()`
 - `ArtifactParser` - `id()`, `displayName()`, `supports(ArtifactInputDescriptor)`,
   `parse(ArtifactInputDescriptor, InputStream, ArtifactParseContext)`, `iconResourceName()`, `openIconStream()`,
-  `installGuideResourceName()` (optional), `openInstallGuideStream()`
+  `installGuideResourceName()` (optional), `openInstallGuideStream()`, `seoTags()` (optional)
 - `ArtifactInputDescriptor` - input type, file name, extension, content type hints
 - `IArtifactParseContext` - checksum utilities, safe temp workspace, metadata writer helpers
 
@@ -262,6 +268,38 @@ removed (a deliberate opt-out), while a parser that simply isn't loaded this run
 Code blocks (`<pre>`) in the rendered popup get a "Copy" button (`assets/app.js`), using the Clipboard API with
 a `document.execCommand('copy')` fallback for non-secure contexts.
 
+### Parser SEO tags
+
+A parser can optionally declare format-specific SEO keywords via `seoTags()` (e.g. the Maven parser returns
+`["maven", "java", "jar", "dependency", "artifact"]`; VSIX returns `["vscode", "visual studio code",
+"extension", "vsix"]`) - defaults to none. These are combined with each individual artifact's own `tags` (see
+[Data model](#data-model)) into that artifact's `<meta name="keywords">` on its detail page, and are also used
+on their own for the parser's index page and (aggregated as parser display names) the home page - see
+[SEO](#seo) below.
+
+`parse` caches each loaded parser's `seoTags()` into the parser SEO tags cache (above) as a JSON object keyed
+by `ArtifactParser.id()`; a parser that declares no tags has any previously cached entry removed (a deliberate
+opt-out), while a parser that simply isn't loaded this run keeps its last-known tags.
+
+## SEO
+
+Every generated page carries baseline SEO meta tags: `<meta name="description">` (from that page's own
+description), `<meta name="robots" content="index, follow">`, Open Graph (`og:type`/`og:title`/
+`og:description`/`og:image`), and Twitter Card tags, with `og:image`/`twitter:image` falling back to the
+site's own favicon when a page has no more specific icon. Artifact detail pages, artifact/parser index pages,
+tag pages, and the home page additionally carry `<meta name="keywords">` (see
+[Parser SEO tags](#parser-seo-tags) above for what feeds it).
+
+## Progressive Web App
+
+The generated site is installable: `generate` writes a `manifest.webmanifest` (named after the effective home
+page title from `--title`, and using the effective favicon from `--favicon` as its icon - see
+[`generate`](#generate)) and a `sw.js` service worker at the site root, registered by `assets/app.js` with a
+scope covering the whole site (works the same whether hosted at a domain root or a subpath, e.g. a GitHub
+Pages project site). The service worker does basic network-first, cache-fallback offline support - since this
+generator's page list (one per parsed artifact/version) isn't known ahead of time by a generic script, pages
+are cached lazily as they're visited rather than precached.
+
 ## Generated site layout
 
 Rendered from FreeMarker templates in `artifact-site-cli/src/main/resources/templates`
@@ -285,6 +323,7 @@ Rendered from FreeMarker templates in `artifact-site-cli/src/main/resources/temp
   overrides (see [Parser icons](#parser-icons)), written only for artifacts whose parser supplied one
 - `search-index.json` - powers the header search box's live results dropdown (vanilla JS, no runtime CSS
   framework)
+- `manifest.webmanifest`, `sw.js` - PWA support, see [Progressive Web App](#progressive-web-app)
 - `downloads/...` - copies of locally-sourced artifacts only
 
 ## Non-goals

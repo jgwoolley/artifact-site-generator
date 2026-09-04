@@ -1,3 +1,16 @@
+// Registers the site's service worker (see sw.js) for basic PWA offline support. Scoped to the
+// site root (not just assets/) via data-root-path (set on <body> by layout.ftl), so it works the
+// same whether the site is hosted at a domain root or a subpath (e.g. a GitHub Pages project site).
+(() => {
+  if (!('serviceWorker' in navigator)) {
+    return;
+  }
+  const rootPath = document.body.dataset.rootPath || '';
+  navigator.serviceWorker.register(`${rootPath}sw.js`, { scope: rootPath || './' }).catch(() => {
+    // Best effort: the site still works fully online without a registered service worker.
+  });
+})();
+
 (() => {
   const input = document.getElementById('site-search');
   const resultsPanel = document.getElementById('search-results');

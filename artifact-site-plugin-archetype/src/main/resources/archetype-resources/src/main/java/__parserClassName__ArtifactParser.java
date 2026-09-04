@@ -2,6 +2,7 @@ package ${package};
 
 import java.io.InputStream;
 import java.nio.file.Files;
+import java.util.List;
 
 import org.jspecify.annotations.Nullable;
 
@@ -42,6 +43,14 @@ public class ${parserClassName}ArtifactParser implements ArtifactParser {
     @Override
     public String installGuideResourceName() {
         return INSTALL_GUIDE_RESOURCE_NAME;
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public List<String> seoTags() {
+        // TODO: return format-specific SEO keywords shown on every page for this parser, on top
+        // of each artifact's own tags - e.g. List.of("${parserId}", "..."). Defaults to none.
+        return List.of();
     }
 
     /** {@inheritDoc} */

@@ -131,6 +131,15 @@ public class ArtifactSiteGeneratorCli implements Runnable {
         return XdgPaths.parserInstallGuidesPath();
     }
 
+    /**
+     * Returns the path of the cached JSON map of parser id to SEO keywords.
+     *
+     * @return parser SEO tags cache file path
+     */
+    public Path parserSeoTagsPath() {
+        return XdgPaths.parserSeoTagsPath();
+    }
+
     public ArtifactsByParser loadArtifacts() {
         Path artifactJsonPath = artifactJsonPath();
         List<ArtifactMetadata> artifactList = new ArrayList<>(1);

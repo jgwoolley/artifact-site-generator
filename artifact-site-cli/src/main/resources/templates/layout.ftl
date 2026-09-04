@@ -5,7 +5,25 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>${title?html}</title>
+  <meta name="description" content="${pageDescription?html}">
+  <#if pageKeywords?? && pageKeywords?has_content>
+  <meta name="keywords" content="${pageKeywords?html}">
+  </#if>
+  <meta name="robots" content="index, follow">
+  <#assign socialImage = pageIcon!"">
+  <#if !socialImage?has_content><#assign socialImage = "/" + faviconPath></#if>
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="${pageHeading?html}">
+  <meta property="og:description" content="${pageDescription?html}">
+  <meta property="og:image" content="${rootPath}${socialImage?remove_beginning('/')}">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="${pageHeading?html}">
+  <meta name="twitter:description" content="${pageDescription?html}">
+  <meta name="twitter:image" content="${rootPath}${socialImage?remove_beginning('/')}">
   <link rel="icon" type="${faviconMimeType}" href="${rootPath}${faviconPath}">
+  <link rel="apple-touch-icon" href="${rootPath}${faviconPath}">
+  <link rel="manifest" href="${rootPath}manifest.webmanifest">
+  <meta name="theme-color" content="#2563eb">
   <link rel="stylesheet" href="${rootPath}assets/styles.css">
 </head>
 <body class="page<#if bodyClass?has_content> ${bodyClass}</#if>" data-root-path="${rootPath}">

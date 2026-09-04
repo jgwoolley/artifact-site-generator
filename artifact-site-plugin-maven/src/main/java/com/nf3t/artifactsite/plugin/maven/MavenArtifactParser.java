@@ -36,6 +36,7 @@ public class MavenArtifactParser implements ArtifactParser {
     private static final String ICON_RESOURCE_NAME = "icon.svg";
     private static final String INSTALL_GUIDE_RESOURCE_NAME = "install.html";
     private static final String PARSER_ID = "maven";
+    private static final List<String> SEO_TAGS = List.of("maven", "java", "jar", "dependency", "artifact");
 
     /** {@inheritDoc} */
     @Override
@@ -59,6 +60,12 @@ public class MavenArtifactParser implements ArtifactParser {
     @Override
     public String installGuideResourceName() {
         return INSTALL_GUIDE_RESOURCE_NAME;
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public List<String> seoTags() {
+        return SEO_TAGS;
     }
 
     /** {@inheritDoc} */

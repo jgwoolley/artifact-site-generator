@@ -39,6 +39,7 @@ public class VsixArtifactParser implements ArtifactParser {
     private static final String ICON_RESOURCE_NAME = "icon.svg";
     private static final String INSTALL_GUIDE_RESOURCE_NAME = "install.html";
     private static final String PARSER_ID = "vsix";
+    private static final List<String> SEO_TAGS = List.of("vscode", "visual studio code", "extension", "vsix");
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     /** {@inheritDoc} */
@@ -63,6 +64,12 @@ public class VsixArtifactParser implements ArtifactParser {
     @Override
     public String iconResourceName() {
         return ICON_RESOURCE_NAME;
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public List<String> seoTags() {
+        return SEO_TAGS;
     }
 
     /** {@inheritDoc} */

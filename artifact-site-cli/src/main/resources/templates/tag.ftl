@@ -1,5 +1,5 @@
 <#import "layout.ftl" as layout>
-<@layout.page title=title rootPath=rootPath pageHeading=pageHeading pageDescription=pageDescription>
+<@layout.page title=title rootPath=rootPath pageHeading=pageHeading pageDescription=pageDescription pageIcon=pageIcon!"">
   <div class="grid artifact-grid">
     <#list artifactCards as artifact>
       <a class="card artifact-card" href="${rootPath}${artifact.url?remove_beginning('/')}">
