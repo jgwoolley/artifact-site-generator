@@ -7,7 +7,8 @@ import org.pf4j.PluginManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.nf3t.artifactsite.api.ArtifactMetadata;
+import com.nf3t.artifactsite.api.ArtifactFields;
+import com.nf3t.artifactsite.api.Datum;
 import com.nf3t.artifactsite.cli.ArtifactSiteGeneratorCli;
 import com.nf3t.artifactsite.cli.ArtifactsByParser;
 
@@ -34,8 +35,8 @@ public class ListArtifactsCommand implements Runnable {
         pluginManager.startPlugins();
 
         ArtifactsByParser artifacts = parentCommand.loadArtifacts();
-        for (ArtifactMetadata artifact : artifacts.save()) {
-            LOGGER.info("Artifact: {}", artifact);
+        for (Datum artifact : artifacts.save()) {
+            LOGGER.info("Artifact: {} ({})", ArtifactFields.getArtifactSlug(artifact), ArtifactFields.VERSION.getString(artifact));
         }
     }
 }

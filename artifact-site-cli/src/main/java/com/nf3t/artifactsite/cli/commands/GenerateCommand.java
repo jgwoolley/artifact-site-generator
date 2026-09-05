@@ -28,13 +28,16 @@ import java.util.jar.JarFile;
 import java.util.jar.Manifest;
 import java.util.regex.Pattern;
 
+import org.commonmark.Extension;
+import org.commonmark.ext.gfm.tables.TablesExtension;
 import org.commonmark.parser.Parser;
 import org.commonmark.renderer.html.HtmlRenderer;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.nf3t.artifactsite.api.ArtifactMetadata;
+import com.nf3t.artifactsite.api.ArtifactFields;
+import com.nf3t.artifactsite.api.Datum;
 import com.nf3t.artifactsite.api.PathUtils;
 import com.nf3t.artifactsite.cli.ArtifactSiteGeneratorCli;
 
@@ -56,11 +59,14 @@ public class GenerateCommand implements Runnable {
     private static final Logger LOGGER = LoggerFactory.getLogger(GenerateCommand.class);
     private static final Pattern SANITIZE_SEGMENT = Pattern.compile("[^a-zA-Z0-9._-]");
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
-    private static final Parser MARKDOWN_PARSER = Parser.builder().build();
+    // Plain CommonMark has no pipe-table syntax; it's a GFM extension that both the parser
+    // and renderer must opt into, or "| a | b |" rows are read as one plain paragraph.
+    private static final List<Extension> MARKDOWN_EXTENSIONS = List.of(TablesExtension.create());
+    private static final Parser MARKDOWN_PARSER = Parser.builder().extensions(MARKDOWN_EXTENSIONS).build();
     // README markdown comes from arbitrary third-party artifacts; escaping any raw HTML in the
     // source (rather than passing it through) keeps a malicious README from injecting a
     // <script> or other active content into the generated site.
-    private static final HtmlRenderer MARKDOWN_RENDERER = HtmlRenderer.builder().escapeHtml(true).build();
+    private static final HtmlRenderer MARKDOWN_RENDERER = HtmlRenderer.builder().escapeHtml(true).extensions(MARKDOWN_EXTENSIONS).build();
     private static final String DEFAULT_FAVICON_ASSET_PATH = "assets/favicon.svg";
     private static final String DEFAULT_FAVICON_MIME_TYPE = "image/svg+xml";
 
@@ -126,7 +132,7 @@ public class GenerateCommand implements Runnable {
         }
     }
 
-    void generate(List<ArtifactMetadata> artifactCatalog, Path outputRoot) throws IOException, TemplateException {
+    void generate(List<Datum> artifactCatalog, Path outputRoot) throws IOException, TemplateException {
         String generatedAt = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.ROOT)
                 .withZone(ZoneOffset.UTC)
                 .format(Instant.now());
@@ -276,25 +282,26 @@ public class GenerateCommand implements Runnable {
     }
 
     private GenerationModel buildModel(
-            List<ArtifactMetadata> artifactCatalog,
+            List<Datum> artifactCatalog,
             Path outputRoot,
             Map<String, String> parserIconUrls,
             Map<String, String> parserDisplayNames,
             Map<String, String> parserInstallGuides,
             Map<String, List<String>> parserSeoTags)
             throws IOException {
-        Map<String, Map<String, List<ArtifactMetadata>>> grouped = new LinkedHashMap<>();
+        Map<String, Map<String, List<Datum>>> grouped = new LinkedHashMap<>();
 
-        for (ArtifactMetadata artifact : artifactCatalog) {
-            if (isBlank(artifact.getPluginId())
-                    || isBlank(artifact.getGroupId())
-                    || isBlank(artifact.getArtifactId())
-                    || isBlank(artifact.getVersion())) {
+        for (Datum artifact : artifactCatalog) {
+            if (isBlank(ArtifactFields.PLUGIN_ID.getString(artifact))
+                    || isBlank(ArtifactFields.GROUP_ID.getString(artifact))
+                    || isBlank(ArtifactFields.ARTIFACT_ID.getString(artifact))
+                    || isBlank(ArtifactFields.VERSION.getString(artifact))) {
+                LOGGER.warn("Ignored Artifact");
                 continue;
             }
 
-            grouped.computeIfAbsent(artifact.getPluginId(), ignored -> new LinkedHashMap<>())
-                    .computeIfAbsent(artifact.getArtifactSlug(), ignored -> new ArrayList<>())
+            grouped.computeIfAbsent(ArtifactFields.PLUGIN_ID.getString(artifact), ignored -> new LinkedHashMap<>())
+                    .computeIfAbsent(ArtifactFields.getArtifactSlug(artifact), ignored -> new ArrayList<>())
                     .add(artifact);
         }
 
@@ -319,11 +326,12 @@ public class GenerateCommand implements Runnable {
 
             for (String artifactKey : artifactKeys) {
                 String artifactSegment = toPathSegment(artifactKey);
-                List<ArtifactMetadata> versions = new ArrayList<>(grouped.get(parserName).get(artifactKey));
-                versions.sort((a, b) -> compareVersions(safe(b.getVersion()), safe(a.getVersion())));
+                List<Datum> versions = new ArrayList<>(grouped.get(parserName).get(artifactKey));
+                versions.sort((a, b) -> compareVersions(
+                        safe(ArtifactFields.VERSION.getString(b)), safe(ArtifactFields.VERSION.getString(a))));
 
-                ArtifactMetadata latest = versions.get(0);
-                String latestVersionSegment = toPathSegment(safe(latest.getVersion()));
+                Datum latest = versions.get(0);
+                String latestVersionSegment = toPathSegment(safe(ArtifactFields.VERSION.getString(latest)));
                 String detailUrl = toArtifactDetailUrl(parserSegment, artifactSegment, latestVersionSegment);
 
                 String parserIconUrl = parserIconUrls.getOrDefault(parserName, defaultIconUrl());
@@ -334,14 +342,14 @@ public class GenerateCommand implements Runnable {
                 allLatestArtifactCards.add(latestCard);
                 searchEntries.add(createSearchEntry(latestCard));
 
-                for (String tag : normalizeTags(latest.getTags())) {
+                for (String tag : normalizeTags(ArtifactFields.TAGS.getStringList(latest))) {
                     tagCards.computeIfAbsent(tag, ignored -> new ArrayList<>()).add(latestCard);
                 }
 
                 List<Map<String, Object>> versionRows = new ArrayList<>();
                 List<Map<String, Object>> detailPages = new ArrayList<>();
-                for (ArtifactMetadata version : versions) {
-                    String versionValue = safe(version.getVersion());
+                for (Datum version : versions) {
+                    String versionValue = safe(ArtifactFields.VERSION.getString(version));
                     String versionSegment = toPathSegment(versionValue);
                     String versionUrl = toArtifactDetailUrl(parserSegment, artifactSegment, versionSegment);
                     String downloadUrl = resolveDownloadUrl(version, outputRoot);
@@ -350,7 +358,7 @@ public class GenerateCommand implements Runnable {
 
                     Map<String, Object> versionRow = new HashMap<>();
                     versionRow.put("version", versionValue);
-                    versionRow.put("description", safe(version.getDescription()));
+                    versionRow.put("description", safe(ArtifactFields.DESCRIPTION.getString(version)));
                     versionRow.put("downloadUrl", downloadUrl);
                     versionRow.put("detailUrl", versionUrl);
                     versionRows.add(versionRow);
@@ -362,25 +370,28 @@ public class GenerateCommand implements Runnable {
                     detailPage.put("version", versionValue);
                     detailPage.put("versionSegment", versionSegment);
                     detailPage.put("parserType", parserDisplayName);
-                    detailPage.put("groupId", safe(version.getGroupId()));
-                    detailPage.put("artifactId", safe(version.getArtifactId()));
-                    detailPage.put("description", safe(version.getDescription()));
-                    detailPage.put("license", safe(version.getLicense()));
-                    detailPage.put("sourceType", safe(version.getSourceType()));
-                    detailPage.put("sourceValue", safe(version.getSourceValue()));
-                    detailPage.put("scmUrl", safe(version.getScmUrl()));
-                    detailPage.put("fileName", safe(version.getFileName()));
-                    detailPage.put("sha256", safe(version.getSha256()));
-                    detailPage.put("fileSizeBytes", version.getFileSizeBytes());
-                    detailPage.put("fileSizeHumanReadable", formatFileSize(version.getFileSizeBytes()));
+                    detailPage.put("groupId", safe(ArtifactFields.GROUP_ID.getString(version)));
+                    detailPage.put("artifactId", safe(ArtifactFields.ARTIFACT_ID.getString(version)));
+                    detailPage.put("description", safe(ArtifactFields.DESCRIPTION.getString(version)));
+                    detailPage.put("license", safe(ArtifactFields.LICENSE.getString(version)));
+                    detailPage.put("sourceType", safe(ArtifactFields.SOURCE_TYPE.getString(version)));
+                    detailPage.put("sourceValue", safe(ArtifactFields.SOURCE_VALUE.getString(version)));
+                    detailPage.put("scmUrl", safe(ArtifactFields.SCM_URL.getString(version)));
+                    detailPage.put("fileName", safe(ArtifactFields.FILE_NAME.getString(version)));
+                    detailPage.put("sha256", safe(ArtifactFields.FILE_SHA256.getString(version)));
+                    detailPage.put("fileSizeBytes", ArtifactFields.FILE_SIZE.getLong(version));
+                    detailPage.put("fileSizeHumanReadable", formatFileSize(ArtifactFields.FILE_SIZE.getLong(version)));
                     detailPage.put("downloadUrl", downloadUrl);
                     detailPage.put("pageIcon", versionIconUrl);
-                    detailPage.put("readmeHtml", renderMarkdown(version.getReadme()));
+                    detailPage.put("readmeHtml", renderMarkdown(ArtifactFields.README.getString(version)));
                     detailPage.put("installGuideHtml", renderInstallGuide(installGuideTemplate, version));
-                    detailPage.put("tags", normalizeTags(version.getTags()));
-                    detailPage.put("authors", normalizeTags(version.getAuthors()));
+                    detailPage.put("tags", normalizeTags(ArtifactFields.TAGS.getStringList(version)));
+                    detailPage.put("authors", normalizeTags(ArtifactFields.AUTHORS.getStringList(version)));
                     detailPage.put(
-                            "pageKeywords", String.join(", ", combineKeywords(version.getTags(), parserKeywords)));
+                            "pageKeywords",
+                            String.join(
+                                    ", ",
+                                    combineKeywords(ArtifactFields.TAGS.getStringList(version), parserKeywords)));
                     detailPages.add(detailPage);
                 }
 
@@ -762,7 +773,7 @@ public class GenerateCommand implements Runnable {
 
     /**
      * Resolves the icon URL for a specific artifact version: a per-artifact icon (see
-     * {@link ArtifactMetadata#getIconData()}), written into the generated site if the parser that
+     * {@link ArtifactFields#ICON_DATA}), written into the generated site if the parser that
      * produced it discovered one, or the owning parser's default icon otherwise.
      *
      * @param artifact artifact version whose icon is being resolved
@@ -774,20 +785,20 @@ public class GenerateCommand implements Runnable {
      * @return site-relative icon URL
      */
     private String resolveArtifactIconUrl(
-            ArtifactMetadata artifact,
+            Datum artifact,
             String parserIconUrl,
             Path outputRoot,
             String parserSegment,
             String artifactSegment,
             String versionSegment) {
-        String iconData = artifact.getIconData();
+        String iconData = ArtifactFields.ICON_DATA.getString(artifact);
         if (isBlank(iconData)) {
             return parserIconUrl;
         }
 
         try {
             byte[] iconBytes = Base64.getDecoder().decode(iconData);
-            String extension = PathUtils.getExtension(Path.of(safe(artifact.getIconFileName())));
+            String extension = PathUtils.getExtension(Path.of(safe(ArtifactFields.ICON_ORIGINAL_FILE_NAME.getString(artifact))));
             String fileName = versionSegment + "." + (isBlank(extension) ? "png" : extension);
             Path destination = outputRoot
                     .resolve("assets/icons/artifacts")
@@ -801,32 +812,35 @@ public class GenerateCommand implements Runnable {
                     + encodePathSegment(artifactSegment) + "/"
                     + encodePathSegment(fileName);
         } catch (IOException | IllegalArgumentException e) {
-            LOGGER.warn("Could not write custom icon for artifact " + artifact.getId(), e);
+            LOGGER.warn("Could not write custom icon for artifact " + ArtifactFields.ID.getString(artifact), e);
             return parserIconUrl;
         }
     }
 
-    private String resolveDownloadUrl(ArtifactMetadata artifact, Path outputRoot) throws IOException {
-        if (!"local".equalsIgnoreCase(safe(artifact.getSourceType()))) {
-            if (!isBlank(artifact.getDownloadUrl())) {
-                return artifact.getDownloadUrl();
+    private String resolveDownloadUrl(Datum artifact, Path outputRoot) throws IOException {
+        if (!"local".equalsIgnoreCase(safe(ArtifactFields.SOURCE_TYPE.getString(artifact)))) {
+            String downloadUrl = ArtifactFields.DOWNLOAD_URL.getString(artifact);
+            if (!isBlank(downloadUrl)) {
+                return downloadUrl;
             }
-            return safe(artifact.getSourceValue());
+            return safe(ArtifactFields.SOURCE_VALUE.getString(artifact));
         }
 
-        if (isBlank(artifact.getSourceValue())) {
+        String sourceValue = ArtifactFields.SOURCE_VALUE.getString(artifact);
+        if (isBlank(sourceValue)) {
             return "#";
         }
 
-        Path sourcePath = Path.of(artifact.getSourceValue());
+        Path sourcePath = Path.of(sourceValue);
         if (!Files.exists(sourcePath)) {
             return "#";
         }
 
-        String artifactIdSegment = toPathSegment(safe(artifact.getArtifactId()));
-        String versionSegment = toPathSegment(safe(artifact.getVersion()));
-        String fileName = !isBlank(artifact.getFileName())
-                ? artifact.getFileName()
+        String artifactIdSegment = toPathSegment(safe(ArtifactFields.ARTIFACT_ID.getString(artifact)));
+        String versionSegment = toPathSegment(safe(ArtifactFields.VERSION.getString(artifact)));
+        String artifactFileName = ArtifactFields.FILE_NAME.getString(artifact);
+        String fileName = !isBlank(artifactFileName)
+                ? artifactFileName
                 : sourcePath.getFileName().toString();
 
         Path destination = outputRoot
@@ -859,16 +873,16 @@ public class GenerateCommand implements Runnable {
     }
 
     private static Map<String, Object> createArtifactCard(
-            ArtifactMetadata artifact, String parserName, String detailUrl, String iconUrl) {
+            Datum artifact, String parserName, String detailUrl, String iconUrl) {
         Map<String, Object> card = new HashMap<>();
         card.put("name", displayName(artifact));
-        card.put("version", safe(artifact.getVersion()));
-        card.put("description", safe(artifact.getDescription()));
-        card.put("tags", normalizeTags(artifact.getTags()));
+        card.put("version", safe(ArtifactFields.VERSION.getString(artifact)));
+        card.put("description", safe(ArtifactFields.DESCRIPTION.getString(artifact)));
+        card.put("tags", normalizeTags(ArtifactFields.TAGS.getStringList(artifact)));
         card.put("url", detailUrl);
         card.put("parserType", parserName);
-        card.put("groupId", safe(artifact.getGroupId()));
-        card.put("artifactId", safe(artifact.getArtifactId()));
+        card.put("groupId", safe(ArtifactFields.GROUP_ID.getString(artifact)));
+        card.put("artifactId", safe(ArtifactFields.ARTIFACT_ID.getString(artifact)));
         card.put("icon", iconUrl);
         return card;
     }
@@ -964,11 +978,12 @@ public class GenerateCommand implements Runnable {
         return URLEncoder.encode(value, StandardCharsets.UTF_8).replace("+", "%20");
     }
 
-    private static String displayName(ArtifactMetadata artifact) {
-        if (!isBlank(artifact.getArtifactName())) {
-            return artifact.getArtifactName();
+    private static String displayName(Datum artifact) {
+        String name = ArtifactFields.NAME.getString(artifact);
+        if (!isBlank(name)) {
+            return name;
         }
-        return artifact.getArtifactSlug();
+        return ArtifactFields.getArtifactSlug(artifact);
     }
 
     /**
@@ -996,14 +1011,14 @@ public class GenerateCommand implements Runnable {
      * @param artifact artifact whose values fill the template's placeholders
      * @return rendered install guide HTML, or an empty string when there is no template
      */
-    private static String renderInstallGuide(@Nullable String template, ArtifactMetadata artifact) {
+    private static String renderInstallGuide(@Nullable String template, Datum artifact) {
         if (isBlank(template)) {
             return "";
         }
         return template
-                .replace("{{groupId}}", escapeHtml(safe(artifact.getGroupId())))
-                .replace("{{artifactId}}", escapeHtml(safe(artifact.getArtifactId())))
-                .replace("{{version}}", escapeHtml(safe(artifact.getVersion())));
+                .replace("{{groupId}}", escapeHtml(safe(ArtifactFields.GROUP_ID.getString(artifact))))
+                .replace("{{artifactId}}", escapeHtml(safe(ArtifactFields.ARTIFACT_ID.getString(artifact))))
+                .replace("{{version}}", escapeHtml(safe(ArtifactFields.VERSION.getString(artifact))));
     }
 
     /** Escapes text for safe inclusion in HTML markup. */

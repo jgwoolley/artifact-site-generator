@@ -1,9 +1,6 @@
 package com.nf3t.artifactsite.cli;
 
-import java.io.IOException;
-import java.io.InputStream;
 import java.net.URI;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -12,12 +9,11 @@ import java.util.Map;
 
 import org.slf4j.Logger;
 
-import com.nf3t.artifactsite.api.ArtifactInputDescriptor;
-import com.nf3t.artifactsite.api.ArtifactMetadata;
+import com.nf3t.artifactsite.api.ArtifactFields;
 import com.nf3t.artifactsite.api.ArtifactParserPlugin;
 import com.nf3t.artifactsite.api.ArtifactSourceType;
+import com.nf3t.artifactsite.api.Datum;
 import com.nf3t.artifactsite.api.IArtifactParseContext;
-import com.nf3t.artifactsite.api.PathUtils;
 
 public class ArtifactParseContext implements IArtifactParseContext {
 	private Logger logger;
@@ -28,8 +24,8 @@ public class ArtifactParseContext implements IArtifactParseContext {
 	private RemoteRequestConfigStore remoteRequestConfigStore;
 	private List<ArtifactParserPlugin> plugins;
 	private ArtifactsByParser artifacts;
-	
-	
+
+
     public ArtifactParseContext(Logger logger, RemoteTlsConfig remoteTlsConfig, Path remoteCacheDir, List<String> httpHeaders, RemoteRequestConfigStore remoteRequestConfigStore, List<ArtifactParserPlugin> plugins, ArtifactsByParser artifacts) {
     	this.logger = logger;
     	this.remoteArtifactDownloader = new RemoteArtifactDownloader();
@@ -40,20 +36,19 @@ public class ArtifactParseContext implements IArtifactParseContext {
     	this.plugins = plugins;
     	this.artifacts = artifacts;
     }
-	
-    private void updateRemoteRequestConfig(
-            RemoteRequestConfigStore store,
-            ArtifactMetadata artifact,
-            ArtifactInputDescriptor descriptor) {
-        String artifactId = artifact.getId();
+
+    private void updateRemoteRequestConfig(RemoteRequestConfigStore store, Datum artifact, Path contentPath) {
+        String artifactId = ArtifactFields.ID.getString(artifact);
         if (artifactId == null || artifactId.isBlank()) {
             return;
         }
 
-        if (descriptor.sourceType() != ArtifactSourceType.REMOTE) {
+        String sourceType = ArtifactFields.SOURCE_TYPE.getString(artifact);
+        String sourceValue = ArtifactFields.SOURCE_VALUE.getString(artifact);
+        if (!ArtifactSourceType.REMOTE.name().equalsIgnoreCase(sourceType)) {
             if (store.getRequestsByArtifactId().containsKey(artifactId)) {
                 logger.info("Removing stored remote fetch configuration for artifact {} because it was (re)parsed from a local input ({})",
-                        artifactId, descriptor.sourceValue());
+                        artifactId, sourceValue);
             }
             store.remove(artifactId);
             return;
@@ -61,9 +56,9 @@ public class ArtifactParseContext implements IArtifactParseContext {
 
         RemoteRequestConfig requestConfig = new RemoteRequestConfig();
         requestConfig.setArtifactId(artifactId);
-        requestConfig.setSourceType(ArtifactSourceType.REMOTE.name().toLowerCase());
-        requestConfig.setSourceValue(descriptor.sourceValue());
-        requestConfig.setCachedPath(descriptor.contentPath().toString());
+        requestConfig.setSourceType(sourceType);
+        requestConfig.setSourceValue(sourceValue);
+        requestConfig.setCachedPath(contentPath.toString());
         requestConfig.setHeaders(parseHeaders(httpHeaders));
         requestConfig.setTls(remoteTlsConfig.isEmpty() ? null : remoteTlsConfig);
         store.put(artifactId, requestConfig);
@@ -97,52 +92,55 @@ public class ArtifactParseContext implements IArtifactParseContext {
         }
         return map;
     }
-	
+
     @Override
-    public void writeArtifact(ArtifactInputDescriptor descriptor, ArtifactMetadata artifact) {
+    public void writeArtifact(Datum artifact, Path contentPath) {
     	if (artifact == null) {
             return;
         }
 
-        // The descriptor is the trusted source of truth for "what input produced this
-        // artifact" — stamped here rather than left to the parser plugin, since
-        // ArtifactParserPlugin is a PF4J extension point and a third-party plugin isn't
-        // guaranteed to have called ArtifactMetadata.updateFileMetadata(descriptor) itself.
-        artifact.updateFileMetadata(descriptor);
     	artifacts.put(artifact);
         if (remoteRequestConfigStore != null) {
-            updateRemoteRequestConfig(remoteRequestConfigStore, artifact, descriptor);
+            updateRemoteRequestConfig(remoteRequestConfigStore, artifact, contentPath);
         }
     }
-    
-    
+
+
 	public void parseInputPaths(Iterable<String> inputPaths) {
         for(String inputPath: inputPaths) {
         	parseInputPath(inputPath);
         }
 	}
-	
-	private ArtifactInputDescriptor createArtifactLocalInputDescriptor(String artifactInput) {
+
+	/**
+	 * Resolves a local input path: the {@link Datum} the CLI stamps with {@link
+	 * ArtifactFields#SOURCE_TYPE}/{@link ArtifactFields#SOURCE_VALUE}/{@link
+	 * ArtifactFields#FILE_NAME} before any parser sees it, paired with the local file to read.
+	 */
+	private ResolvedInput resolveLocalInput(String artifactInput) {
         Path path = Path.of(artifactInput);
 
-		String extension = PathUtils.getExtension(path);
-        String contentType = "application/octet-stream";
-        try {
-            contentType = Files.probeContentType(path);
-        } catch (IOException ignored) {
-
-        }
-        return new ArtifactInputDescriptor(path, ArtifactSourceType.LOCAL, path.toString(), path.getFileName().toString(), extension, contentType);
+        Datum datum = createDatum();
+        ArtifactFields.SOURCE_TYPE.setString(datum, ArtifactSourceType.LOCAL.name().toLowerCase());
+        ArtifactFields.SOURCE_VALUE.setString(datum, path.toString());
+        ArtifactFields.FILE_NAME.setString(datum, path.getFileName().toString());
+        return new ResolvedInput(path, datum);
 	}
-	
-	private ArtifactInputDescriptor createArtifactRemoteInputDescriptor(String artifactInput) {
+
+	/**
+	 * Downloads and resolves a remote input URL, mirroring {@link #resolveLocalInput(String)} for
+	 * an artifact fetched over HTTP(S).
+	 *
+	 * @return the resolved datum and downloaded content path, or {@code null} when the download
+	 *     failed (already logged)
+	 */
+	private ResolvedInput resolveRemoteInput(String artifactInput) {
 		try {
 	        Map<String, String> headers = parseHeaders(httpHeaders);
 			RemoteDownloadResult remoteDownloadResult = remoteArtifactDownloader.download(artifactInput, headers, remoteTlsConfig, remoteCacheDir);
             Path parsePath = remoteDownloadResult.localPath();
             String fileName = remoteDownloadResult.fileName();
-            String contentType = remoteDownloadResult.contentType();
-            
+
             String resolvedFileName = fileName;
             if (resolvedFileName == null || resolvedFileName.isBlank()) {
                 String path = URI.create(artifactInput).getPath();
@@ -151,55 +149,66 @@ public class ArtifactParseContext implements IArtifactParseContext {
                     resolvedFileName = path.substring(lastSeparator + 1);
                 }
             }
-            String extension = resolvedFileName == null ? null : PathUtils.getExtension(Path.of(resolvedFileName));
-            return new ArtifactInputDescriptor(parsePath, ArtifactSourceType.REMOTE, artifactInput, resolvedFileName, extension, contentType);
-            
+
+            Datum datum = createDatum();
+            ArtifactFields.SOURCE_TYPE.setString(datum, ArtifactSourceType.REMOTE.name().toLowerCase());
+            ArtifactFields.SOURCE_VALUE.setString(datum, artifactInput);
+            ArtifactFields.FILE_NAME.setString(datum, resolvedFileName);
+            return new ResolvedInput(parsePath, datum);
+
         } catch (Exception e) {
         	logger.error("Unable to download remote artifact {}", artifactInput, e);
             return null;
         }
 	}
-	
-	public ArtifactInputDescriptor createArtifactInputDescriptor(String artifactInput) {
+
+	private ResolvedInput resolveInput(String artifactInput) {
 		boolean remoteInput = isRemoteInput(artifactInput);
 
         if (remoteInput) {
-            return createArtifactRemoteInputDescriptor(artifactInput);
+            return resolveRemoteInput(artifactInput);
         } else {
-        	return createArtifactLocalInputDescriptor(artifactInput);
+        	return resolveLocalInput(artifactInput);
         }
 	}
-	
+
 	public void parseInputPath(String artifactInput) {
 		logger.debug("Input Artifact: {}", artifactInput);
 
-		ArtifactInputDescriptor descriptor;
+		ResolvedInput resolved;
 		try {
-			descriptor = createArtifactInputDescriptor(artifactInput);
+			resolved = resolveInput(artifactInput);
 		} catch (Exception e) {
 			// Never let a single bad input (e.g. a malformed --http-header value,
 			// or any other unexpected failure) abort the whole batch: doing so
 			// would skip saveArtifacts()/saveRemoteRequestConfigStore() in
 			// ParseCommand and silently drop every artifact already parsed from
 			// earlier inputs in this run.
-			logger.error("Could not create input descriptor for {}", artifactInput, e);
+			logger.error("Could not resolve input {}", artifactInput, e);
+			return;
+		}
+
+		if (resolved == null) {
+			// Remote download failure; already logged in resolveRemoteInput().
 			return;
 		}
 
         for (ArtifactParserPlugin plugin : plugins) {
             final var parser = plugin.parser();
-            if (!parser.supports(descriptor)) {
+            if (!parser.supports(resolved.datum())) {
                 continue;
             }
 
             try {
             	// TODO: Should have multiple phases that gather metadata
-                try (InputStream input = Files.newInputStream(descriptor.contentPath())) {
-                    parser.parse(descriptor, this);
-                }          
+                parser.parse(resolved.datum(), resolved.contentPath(), this);
             } catch (Exception e) {
             	logger.warn("Could not parse " + artifactInput + " with " + parser.getClass(), e);
             }
         }
+	}
+
+	/** A resolved artifact input: its local content path, paired with a freshly-stamped datum. */
+	private record ResolvedInput(Path contentPath, Datum datum) {
 	}
 }

@@ -2,7 +2,6 @@ package com.nf3t.artifactsite.plugin.vsix;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.concurrent.atomic.AtomicReference;
@@ -11,25 +10,33 @@ import java.util.zip.ZipOutputStream;
 
 import org.junit.jupiter.api.Test;
 
-import com.nf3t.artifactsite.api.ArtifactInputDescriptor;
-import com.nf3t.artifactsite.api.ArtifactMetadata;
-import com.nf3t.artifactsite.api.ArtifactSourceType;
+import com.nf3t.artifactsite.api.ArtifactFields;
+import com.nf3t.artifactsite.api.Datum;
 import com.nf3t.artifactsite.api.IArtifactParseContext;
+import com.nf3t.artifactsite.api.MapDatum;
 
 class VsixArtifactParserTest {
 
     private final VsixArtifactParser parser = new VsixArtifactParser();
 
+    private static Datum withFileName(String fileName) {
+        Datum datum = new MapDatum();
+        ArtifactFields.FILE_NAME.setString(datum, fileName);
+        return datum;
+    }
+
+    private static IArtifactParseContext capturing(AtomicReference<Datum> metadataRef) {
+        return new IArtifactParseContext() {
+            @Override
+            public void writeArtifact(Datum artifact, Path contentPath) {
+                metadataRef.set(artifact);
+            }
+        };
+    }
+
     @Test
     void supportsVsixFiles() {
-        ArtifactInputDescriptor descriptor = new ArtifactInputDescriptor(
-                null, ArtifactSourceType.LOCAL,
-                "/tmp/sample.vsix",
-                "sample.vsix",
-                "vsix",
-                "application/zip");
-
-        assertThat(parser.supports(descriptor)).isTrue();
+        assertThat(parser.supports(withFileName("sample.vsix"))).isTrue();
     }
 
     @Test
@@ -59,33 +66,20 @@ class VsixArtifactParserTest {
             out.closeEntry();
         }
 
-        final AtomicReference<ArtifactMetadata> metadataRef = new AtomicReference<>();
-        try (InputStream input = Files.newInputStream(vsix)) {
-            parser.parse(new ArtifactInputDescriptor(
-            		vsix, ArtifactSourceType.LOCAL,
-                    vsix.toString(),
-                    vsix.getFileName().toString(),
-                    "vsix",
-                    "application/zip"), new IArtifactParseContext() {
-						@Override
-						public void writeArtifact(ArtifactInputDescriptor descriptor, ArtifactMetadata artifact) {
-							metadataRef.set(artifact);
-						}
-            	
-            });
-        }
-        
-        ArtifactMetadata metadata = metadataRef.get();
-        assertThat(metadata.getArtifactId()).isEqualTo("artifact-id");
-        assertThat(metadata.getVersion()).isEqualTo("1.2.3");
-        assertThat(metadata.getGroupId()).isEqualTo("example.publisher");
-        assertThat(metadata.getArtifactName()).isEqualTo("Package JSON Extension");
-        assertThat(metadata.getDescription()).isEqualTo("A human-readable VSIX description.");
-        assertThat(metadata.getAuthors()).containsExactly("Jane Developer", "John Contributor");
-        assertThat(metadata.getScmUrl()).isEqualTo("https://github.com/acme/extension");
-        assertThat(metadata.getPluginId()).isEqualTo("vsix");
-        assertThat(metadata.getSha256()).isNotBlank();
-        assertThat(metadata.getFileSizeBytes()).isPositive();
+        final AtomicReference<Datum> metadataRef = new AtomicReference<>();
+        parser.parse(withFileName(vsix.getFileName().toString()), vsix, capturing(metadataRef));
+
+        Datum metadata = metadataRef.get();
+        assertThat(ArtifactFields.ARTIFACT_ID.getString(metadata)).isEqualTo("artifact-id");
+        assertThat(ArtifactFields.VERSION.getString(metadata)).isEqualTo("1.2.3");
+        assertThat(ArtifactFields.GROUP_ID.getString(metadata)).isEqualTo("example.publisher");
+        assertThat(ArtifactFields.NAME.getString(metadata)).isEqualTo("Package JSON Extension");
+        assertThat(ArtifactFields.DESCRIPTION.getString(metadata)).isEqualTo("A human-readable VSIX description.");
+        assertThat(ArtifactFields.AUTHORS.getStringList(metadata)).containsExactly("Jane Developer", "John Contributor");
+        assertThat(ArtifactFields.SCM_URL.getString(metadata)).isEqualTo("https://github.com/acme/extension");
+        assertThat(ArtifactFields.PLUGIN_ID.getString(metadata)).isEqualTo("vsix");
+        assertThat(ArtifactFields.FILE_SHA256.getString(metadata)).isNotBlank();
+        assertThat(ArtifactFields.FILE_SIZE.getLong(metadata)).isPositive();
     }
 
     @Test
@@ -105,28 +99,14 @@ class VsixArtifactParserTest {
             out.closeEntry();
         }
 
-        final AtomicReference<ArtifactMetadata> metadataRef = new AtomicReference<>();
-        try (InputStream input = Files.newInputStream(vsix)) {
-             parser.parse(new ArtifactInputDescriptor(
-            		vsix, ArtifactSourceType.LOCAL,
-                    vsix.toString(),
-                    vsix.getFileName().toString(),
-                    "vsix",
-                    "application/zip"), new IArtifactParseContext() {
+        final AtomicReference<Datum> metadataRef = new AtomicReference<>();
+        parser.parse(withFileName(vsix.getFileName().toString()), vsix, capturing(metadataRef));
+        Datum metadata = metadataRef.get();
 
-						@Override
-						public void writeArtifact(ArtifactInputDescriptor descriptor, ArtifactMetadata artifact) {
-							metadataRef.set(artifact);
-						}
-            	 
-             });
-        }
-        ArtifactMetadata metadata = metadataRef.get();
-
-        assertThat(metadata.getArtifactId()).isEqualTo("vscode-artifact");
-        assertThat(metadata.getVersion()).isEqualTo("0.0.1");
-        assertThat(metadata.getGroupId()).isEqualTo("publisher.name");
-        assertThat(metadata.getArtifactName()).isEqualTo("VS Code Extension");
+        assertThat(ArtifactFields.ARTIFACT_ID.getString(metadata)).isEqualTo("vscode-artifact");
+        assertThat(ArtifactFields.VERSION.getString(metadata)).isEqualTo("0.0.1");
+        assertThat(ArtifactFields.GROUP_ID.getString(metadata)).isEqualTo("publisher.name");
+        assertThat(ArtifactFields.NAME.getString(metadata)).isEqualTo("VS Code Extension");
     }
 
     @Test
@@ -146,25 +126,11 @@ class VsixArtifactParserTest {
             out.closeEntry();
         }
 
-        final AtomicReference<ArtifactMetadata> metadataRef = new AtomicReference<>();
-        try (InputStream input = Files.newInputStream(vsix)) {
-            parser.parse(new ArtifactInputDescriptor(
-                    vsix, ArtifactSourceType.LOCAL,
-                    vsix.toString(),
-                    vsix.getFileName().toString(),
-                    "vsix",
-                    "application/zip"), new IArtifactParseContext() {
+        final AtomicReference<Datum> metadataRef = new AtomicReference<>();
+        parser.parse(withFileName(vsix.getFileName().toString()), vsix, capturing(metadataRef));
 
-				@Override
-				public void writeArtifact(ArtifactInputDescriptor descriptor, ArtifactMetadata artifact) {
-					metadataRef.set(artifact);
-				}
-    	 
-     });
-        }
-        
-        ArtifactMetadata metadata = metadataRef.get();
-        assertThat(metadata.getArtifactName()).isEqualTo("Namespaced Extension");
+        Datum metadata = metadataRef.get();
+        assertThat(ArtifactFields.NAME.getString(metadata)).isEqualTo("Namespaced Extension");
     }
 
     @Test
@@ -189,23 +155,11 @@ class VsixArtifactParserTest {
             out.closeEntry();
         }
 
-        final AtomicReference<ArtifactMetadata> metadataRef = new AtomicReference<>();
-        try (InputStream input = Files.newInputStream(vsix)) {
-            parser.parse(new ArtifactInputDescriptor(
-                    vsix, ArtifactSourceType.LOCAL,
-                    vsix.toString(),
-                    vsix.getFileName().toString(),
-                    "vsix",
-                    "application/zip"), new IArtifactParseContext() {
-                @Override
-                public void writeArtifact(ArtifactInputDescriptor descriptor, ArtifactMetadata artifact) {
-                    metadataRef.set(artifact);
-                }
-            });
-        }
+        final AtomicReference<Datum> metadataRef = new AtomicReference<>();
+        parser.parse(withFileName(vsix.getFileName().toString()), vsix, capturing(metadataRef));
 
-        ArtifactMetadata metadata = metadataRef.get();
-        assertThat(metadata.getReadme()).isEqualTo("# Extension\n\nSome docs.");
+        Datum metadata = metadataRef.get();
+        assertThat(ArtifactFields.README.getString(metadata)).isEqualTo("# Extension\n\nSome docs.");
     }
 
     @Test
@@ -234,24 +188,13 @@ class VsixArtifactParserTest {
             out.closeEntry();
         }
 
-        final AtomicReference<ArtifactMetadata> metadataRef = new AtomicReference<>();
-        try (InputStream input = Files.newInputStream(vsix)) {
-            parser.parse(new ArtifactInputDescriptor(
-                    vsix, ArtifactSourceType.LOCAL,
-                    vsix.toString(),
-                    vsix.getFileName().toString(),
-                    "vsix",
-                    "application/zip"), new IArtifactParseContext() {
-                @Override
-                public void writeArtifact(ArtifactInputDescriptor descriptor, ArtifactMetadata artifact) {
-                    metadataRef.set(artifact);
-                }
-            });
-        }
+        final AtomicReference<Datum> metadataRef = new AtomicReference<>();
+        parser.parse(withFileName(vsix.getFileName().toString()), vsix, capturing(metadataRef));
 
-        ArtifactMetadata metadata = metadataRef.get();
-        assertThat(metadata.getIconFileName()).isEqualTo("icon.png");
-        assertThat(metadata.getIconData()).isEqualTo(java.util.Base64.getEncoder().encodeToString(iconBytes));
+        Datum metadata = metadataRef.get();
+        assertThat(ArtifactFields.ICON_ORIGINAL_FILE_NAME.getString(metadata)).isEqualTo("icon.png");
+        assertThat(ArtifactFields.ICON_DATA.getString(metadata))
+                .isEqualTo(java.util.Base64.getEncoder().encodeToString(iconBytes));
     }
 
     @Test
@@ -269,24 +212,12 @@ class VsixArtifactParserTest {
             out.closeEntry();
         }
 
-        final AtomicReference<ArtifactMetadata> metadataRef = new AtomicReference<>();
-        try (InputStream input = Files.newInputStream(vsix)) {
-            parser.parse(new ArtifactInputDescriptor(
-                    vsix, ArtifactSourceType.LOCAL,
-                    vsix.toString(),
-                    vsix.getFileName().toString(),
-                    "vsix",
-                    "application/zip"), new IArtifactParseContext() {
-                @Override
-                public void writeArtifact(ArtifactInputDescriptor descriptor, ArtifactMetadata artifact) {
-                    metadataRef.set(artifact);
-                }
-            });
-        }
+        final AtomicReference<Datum> metadataRef = new AtomicReference<>();
+        parser.parse(withFileName(vsix.getFileName().toString()), vsix, capturing(metadataRef));
 
-        ArtifactMetadata metadata = metadataRef.get();
-        assertThat(metadata.getIconData()).isNull();
-        assertThat(metadata.getIconFileName()).isNull();
+        Datum metadata = metadataRef.get();
+        assertThat(ArtifactFields.ICON_DATA.getString(metadata)).isNull();
+        assertThat(ArtifactFields.ICON_ORIGINAL_FILE_NAME.getString(metadata)).isNull();
     }
 
     @Test
@@ -304,21 +235,9 @@ class VsixArtifactParserTest {
             out.closeEntry();
         }
 
-        final AtomicReference<ArtifactMetadata> metadataRef = new AtomicReference<>();
-        try (InputStream input = Files.newInputStream(vsix)) {
-            parser.parse(new ArtifactInputDescriptor(
-                    vsix, ArtifactSourceType.LOCAL,
-                    vsix.toString(),
-                    vsix.getFileName().toString(),
-                    "vsix",
-                    "application/zip"), new IArtifactParseContext() {
-                @Override
-                public void writeArtifact(ArtifactInputDescriptor descriptor, ArtifactMetadata artifact) {
-                    metadataRef.set(artifact);
-                }
-            });
-        }
+        final AtomicReference<Datum> metadataRef = new AtomicReference<>();
+        parser.parse(withFileName(vsix.getFileName().toString()), vsix, capturing(metadataRef));
 
-        assertThat(metadataRef.get().getReadme()).isNull();
+        assertThat(ArtifactFields.README.getString(metadataRef.get())).isNull();
     }
 }

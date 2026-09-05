@@ -2,12 +2,12 @@ package com.nf3t.artifactsite.plugin.maven;
 
 import java.io.InputStream;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.Enumeration;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.Properties;
 import java.util.zip.ZipEntry;
@@ -17,11 +17,19 @@ import org.apache.maven.model.Developer;
 import org.apache.maven.model.Model;
 import org.apache.maven.model.Scm;
 import org.apache.maven.model.io.xpp3.MavenXpp3Reader;
+import org.apache.nifi.extension.manifest.Attribute;
+import org.apache.nifi.extension.manifest.DynamicProperty;
+import org.apache.nifi.extension.manifest.DynamicRelationship;
+import org.apache.nifi.extension.manifest.Extension;
+import org.apache.nifi.extension.manifest.ExtensionManifest;
+import org.apache.nifi.extension.manifest.Property;
+import org.apache.nifi.extension.manifest.Relationship;
+import org.apache.nifi.extension.manifest.parser.jaxb.JAXBExtensionManifestParser;
 import org.jspecify.annotations.Nullable;
 
-import com.nf3t.artifactsite.api.ArtifactInputDescriptor;
-import com.nf3t.artifactsite.api.ArtifactMetadata;
+import com.nf3t.artifactsite.api.ArtifactFields;
 import com.nf3t.artifactsite.api.ArtifactParser;
+import com.nf3t.artifactsite.api.Datum;
 import com.nf3t.artifactsite.api.IArtifactParseContext;
 import com.nf3t.artifactsite.api.PathUtils;
 
@@ -29,7 +37,6 @@ import com.nf3t.artifactsite.api.PathUtils;
  * Parser for Maven-published JAR files.
  */
 public class MavenArtifactParser implements ArtifactParser {
-
     private static final String POM_PROPERTIES_SUFFIX = "/pom.properties";
     private static final String MAVEN_METADATA_PREFIX = "META-INF/maven/";
     private static final String ICON_RESOURCE_NAME = "icon.svg";
@@ -37,8 +44,10 @@ public class MavenArtifactParser implements ArtifactParser {
     private static final String PARSER_ID = "maven";
     private static final List<String> SEO_TAGS = List.of("maven", "java", "jar", "dependency", "artifact");
     private final MavenXpp3Reader pomReader;
+    private final JAXBExtensionManifestParser nifiParser;
 
     public MavenArtifactParser() {
+    	this.nifiParser = new JAXBExtensionManifestParser();
         this.pomReader = new MavenXpp3Reader();
     }
 
@@ -74,49 +83,151 @@ public class MavenArtifactParser implements ArtifactParser {
 
     /** {@inheritDoc} */
     @Override
-    public boolean supports(@Nullable ArtifactInputDescriptor descriptor) {
-        if (descriptor == null || descriptor.fileName() == null) {
+    public boolean supports(@Nullable Datum datum) {
+        if (datum == null) {
             return false;
         }
-
-        return descriptor.fileName().toLowerCase().endsWith(".jar")
-                || Objects.equals("jar", descriptor.extension());
+        String fileName = ArtifactFields.FILE_NAME.getString(datum);
+        if (fileName == null) {
+            return false;
+        }
+        String lowerCaseFileName = fileName.toLowerCase();
+        // A NiFi Archive (.nar) is a Maven-built JAR with the same META-INF/maven/**/pom.properties
+        // layout, plus an optional META-INF/docs/extension-manifest.xml this parser also reads.
+        return lowerCaseFileName.endsWith(".jar") || lowerCaseFileName.endsWith(".nar") || lowerCaseFileName.endsWith(".war");
     }
 
     /** {@inheritDoc} */
     @Override
-    public void parse(ArtifactInputDescriptor descriptor, IArtifactParseContext context)
+    public void parse(Datum metadata, Path contentPath, IArtifactParseContext context)
             throws Exception {
 
-        ArtifactMetadata metadata = new ArtifactMetadata();
+        String fileName = ArtifactFields.FILE_NAME.getString(metadata);
         // ZipFile gives random-access reads straight off the file on disk - entries are
         // located by index and streamed individually, so the JAR's bytes are never buffered
         // into memory as a whole.
-        try (ZipFile zipFile = new ZipFile(descriptor.contentPath().toFile())) {
-            PomCandidate selected = selectPomCandidate(zipFile, descriptor.fileName())
+        try (ZipFile zipFile = new ZipFile(contentPath.toFile())) {
+            PomCandidate selected = selectPomCandidate(zipFile, fileName)
                     .orElseThrow(() -> new IllegalArgumentException("JAR missing META-INF/maven/**/pom.properties"));
 
-            metadata.setGroupId(selected.groupId());
-            metadata.setArtifactId(selected.artifactId());
-            metadata.setVersion(selected.version());
-            metadata.setArtifactName(selected.artifactId());
-            metadata.setId(selected.groupId() + ":" + selected.artifactId() + ":" + selected.version());
+            ArtifactFields.GROUP_ID.setString(metadata, selected.groupId());
+            ArtifactFields.ARTIFACT_ID.setString(metadata, selected.artifactId());
+            ArtifactFields.VERSION.setString(metadata, selected.version());
+            ArtifactFields.ID.setString(metadata, selected.groupId() + ":" + selected.artifactId() + ":" + selected.version());
 
             Optional<Model> pomModel = readPomModel(zipFile, selected.path());
-            metadata.setDescription(firstNonBlank(
+            ArtifactFields.DESCRIPTION.setString(metadata, firstNonBlank(
                     pomModel.map(Model::getDescription).orElse(null), selected.description()));
-            metadata.setAuthors(pomModel.map(MavenArtifactParser::readDevelopers).orElse(List.of()));
-            metadata.setArtifactName(firstNonBlank(
+            ArtifactFields.AUTHORS.getStringList(metadata)
+                    .addAll(pomModel.map(MavenArtifactParser::readDevelopers).orElse(List.of()));
+            ArtifactFields.NAME.setString(metadata, firstNonBlank(
                     pomModel.map(Model::getName).orElse(null), selected.artifactName(), selected.artifactId()));
-            metadata.setPluginId(id());
-            metadata.setScmUrl(pomModel.flatMap(MavenArtifactParser::readScmUrl).orElse(null));
+            ArtifactFields.PLUGIN_ID.setString(metadata, id());
+            ArtifactFields.SCM_URL.setString(metadata, pomModel.flatMap(MavenArtifactParser::readScmUrl).orElse(null));
         }
 
-        metadata.setFileSizeBytes(Files.size(descriptor.contentPath()));
-        metadata.setSha256(PathUtils.sha256(descriptor.contentPath()));
-        context.writeArtifact(descriptor, metadata);
+        try (ZipFile zipFile = new ZipFile(contentPath.toFile())) {
+            ZipEntry entry = zipFile.getEntry("META-INF/docs/extension-manifest.xml");
+            if (entry != null) {
+                try (InputStream is = zipFile.getInputStream(entry)) {
+                    ExtensionManifest manifest = this.nifiParser.parse(is);
+                    
+                    for(Extension extension: manifest.getExtensions()) {
+                    	parseExtension(context, contentPath, metadata, manifest, extension);
+                    }
+                }
+            }
+        }
+        
+        ArtifactFields.FILE_SIZE.setLong(metadata, Files.size(contentPath));
+        ArtifactFields.FILE_SHA256.setString(metadata, PathUtils.sha256(contentPath));
+        context.writeArtifact(metadata, contentPath);
     }
 
+    private void parseExtension(IArtifactParseContext context, Path contentPath, Datum parent, ExtensionManifest manifest, Extension extension) {
+    	final Datum extensionMetadata = context.createDatum();
+        NarExtensionFields.HAS_EXTENSION.setReference(NarExtensionFields.HAS_NAR, parent, extensionMetadata);
+        final String id = extension.getName();
+        final String name = simpleClassName(id);
+        ArtifactFields.NAME.setString(extensionMetadata, name);
+        final String description = extension.getDescription();
+        ArtifactFields.DESCRIPTION.setString(extensionMetadata, description);
+        final String version = manifest.getVersion();
+        ArtifactFields.VERSION.setString(extensionMetadata, version);
+        final String groupId = ArtifactFields.GROUP_ID.getString(parent);
+        final String sourceType = ArtifactFields.SOURCE_TYPE.getString(parent);
+        ArtifactFields.PLUGIN_ID.setString(extensionMetadata, id());
+        ArtifactFields.GROUP_ID.setString(extensionMetadata, groupId);
+        ArtifactFields.ARTIFACT_ID.setString(extensionMetadata, name);
+        ArtifactFields.ID.setString(extensionMetadata, id);
+        ArtifactFields.SOURCE_TYPE.setString(extensionMetadata, sourceType);
+        final List<String> tags = extension.getTags();
+        ArtifactFields.TAGS.getStringList(extensionMetadata).addAll(tags);
+        
+        final StringBuilder readme = new StringBuilder();
+        
+        final DynamicRelationship dynamicRelationship = extension.getDynamicRelationship();
+        if(dynamicRelationship != null) {
+        	writeKeyValue(readme, "Dynamic Relationship", "Value");
+        	writeKeyValue(readme, "-------", "-------");
+        	writeKeyValue(readme, dynamicRelationship.getName(), dynamicRelationship.getDescription());
+	        readme.append("\n\n\n\n");
+        }
+        
+        if(extension.getDynamicProperties() != null) {
+        	writeKeyValue(readme, "Dynamic Property", "Value");
+        	writeKeyValue(readme, "-------", "-------");
+            for(DynamicProperty dynamicProperty: extension.getDynamicProperties()) {
+	        	writeKeyValue(readme, dynamicProperty.getName(), dynamicProperty.getDescription());
+            }
+	        readme.append("\n\n\n\n");
+        }
+        
+        if(extension.getProperties() != null) {
+        	writeKeyValue(readme, "Property", "Value");
+        	writeKeyValue(readme, "-------", "-------");
+        	for(Property relationship: extension.getProperties()) {
+	        	writeKeyValue(readme, relationship.getName(), relationship.getDescription());
+            }
+	        readme.append("\n\n\n\n");
+        }
+        
+        if(extension.getRelationships() != null) {
+        	writeKeyValue(readme, "Relationship", "Value");
+        	writeKeyValue(readme, "-------", "-------");
+        	for(Relationship relationship: extension.getRelationships()) {
+	        	writeKeyValue(readme, relationship.getName(), relationship.getDescription());
+            }
+	        readme.append("\n\n\n\n");
+        }
+        
+        if(extension.getReadsAttributes() != null) {
+        	writeKeyValue(readme, "Reads Attribute", "Value");
+        	writeKeyValue(readme, "-------", "-------");
+        	for(Attribute attribute: extension.getReadsAttributes()) {
+	        	writeKeyValue(readme, attribute.getName(), attribute.getDescription());
+            }
+	        readme.append("\n\n\n\n");
+        }
+             
+        if(extension.getWritesAttributes() != null) {
+        	writeKeyValue(readme, "Writes Attribute", "Value");
+        	writeKeyValue(readme, "-------", "-------");
+	        for(Attribute attribute: extension.getWritesAttributes()) {
+	        	writeKeyValue(readme, attribute.getName(), attribute.getDescription());
+	        }
+	        readme.append("\n\n\n\n");
+        }
+                
+        ArtifactFields.README.setString(extensionMetadata, readme.toString());
+                
+        context.writeArtifact(extensionMetadata, contentPath);
+    }
+    
+    private static void writeKeyValue(StringBuilder builder, String key, String value) {
+    	builder.append("| ").append(key).append(" | ").append(value).append(" |\n");
+    }
+    
     private Optional<PomCandidate> selectPomCandidate(ZipFile zipFile, @Nullable String jarFileName) throws Exception {
         String jarBaseName = normalizeJarBaseName(jarFileName);
         return readPomCandidates(zipFile).stream()
@@ -244,6 +355,15 @@ public class MavenArtifactParser implements ArtifactParser {
             return name.substring(0, name.length() - 4);
         }
         return name;
+    }
+
+    /** Reduces a fully-qualified extension class name to its simple class name for display. */
+    private static @Nullable String simpleClassName(@Nullable String fullyQualifiedName) {
+        if (fullyQualifiedName == null) {
+            return null;
+        }
+        int lastDot = fullyQualifiedName.lastIndexOf('.');
+        return lastDot < 0 ? fullyQualifiedName : fullyQualifiedName.substring(lastDot + 1);
     }
 
     private static @Nullable String trimToNull(@Nullable String value) {

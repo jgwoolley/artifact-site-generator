@@ -20,9 +20,10 @@ import org.pf4j.PluginManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.nf3t.artifactsite.api.ArtifactMetadata;
 import com.nf3t.artifactsite.api.ArtifactParser;
 import com.nf3t.artifactsite.api.ArtifactParserPlugin;
+import com.nf3t.artifactsite.api.Datum;
+import com.nf3t.artifactsite.api.MapDatum;
 import com.nf3t.artifactsite.cli.commands.AddPluginCommand;
 import com.nf3t.artifactsite.cli.commands.ClearPluginCommand;
 import com.nf3t.artifactsite.cli.commands.GenerateCommand;
@@ -142,15 +143,16 @@ public class ArtifactSiteGeneratorCli implements Runnable {
 
     public ArtifactsByParser loadArtifacts() {
         Path artifactJsonPath = artifactJsonPath();
-        List<ArtifactMetadata> artifactList = new ArrayList<>(1);
+        List<MapDatum> rawArtifactList = new ArrayList<>(1);
 
         if (Files.exists(artifactJsonPath)) {
             try (InputStream is = Files.newInputStream(artifactJsonPath)) {
-            	artifactList = objectMapper.readValue(is, new TypeReference<>() {});
+            	rawArtifactList = objectMapper.readValue(is, new TypeReference<List<MapDatum>>() {});
             } catch(Exception e) {
                 LOGGER.error("Failed to read artifacts at " + artifactJsonPath, e);
             }
         }
+        List<Datum> artifactList = new ArrayList<>(rawArtifactList);
 
         LOGGER.debug("Read {} artifact(s) to {}", artifactList.size(), artifactJsonPath);
 
@@ -161,7 +163,7 @@ public class ArtifactSiteGeneratorCli implements Runnable {
     }
 
     public void saveArtifacts(ArtifactsByParser artifacts) {
-    	List<ArtifactMetadata> artifactList = artifacts.save();
+    	List<Datum> artifactList = artifacts.save();
         Path artifactJsonPath = artifactJsonPath();
 
         try {

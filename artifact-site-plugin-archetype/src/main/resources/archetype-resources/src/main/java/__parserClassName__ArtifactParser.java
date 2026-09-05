@@ -2,13 +2,14 @@ package ${package};
 
 import java.io.InputStream;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.List;
 
 import org.jspecify.annotations.Nullable;
 
-import com.nf3t.artifactsite.api.ArtifactInputDescriptor;
-import com.nf3t.artifactsite.api.ArtifactMetadata;
+import com.nf3t.artifactsite.api.ArtifactFields;
 import com.nf3t.artifactsite.api.ArtifactParser;
+import com.nf3t.artifactsite.api.Datum;
 import com.nf3t.artifactsite.api.IArtifactParseContext;
 import com.nf3t.artifactsite.api.PathUtils;
 
@@ -55,34 +56,39 @@ public class ${parserClassName}ArtifactParser implements ArtifactParser {
 
     /** {@inheritDoc} */
     @Override
-    public boolean supports(@Nullable ArtifactInputDescriptor descriptor) {
-        if (descriptor == null || descriptor.fileName() == null) {
+    public boolean supports(@Nullable Datum datum) {
+        if (datum == null) {
+            return false;
+        }
+        String fileName = ArtifactFields.FILE_NAME.getString(datum);
+        if (fileName == null) {
             return false;
         }
 
         // TODO: match this parser's file extension(s), e.g.:
-        // return descriptor.fileName().toLowerCase().endsWith(".ext");
+        // return fileName.toLowerCase().endsWith(".ext");
         return false;
     }
 
     /** {@inheritDoc} */
     @Override
-    public void parse(ArtifactInputDescriptor descriptor, IArtifactParseContext context) throws Exception {
-        ArtifactMetadata metadata = new ArtifactMetadata();
+    public void parse(Datum metadata, Path contentPath, IArtifactParseContext context) throws Exception {
+        // TODO: populate the required fields from the artifact's contents. Note metadata may
+        // already carry fields written by another parser that also supports() this input, or the
+        // CLI itself (e.g. ArtifactFields.FILE_NAME) - only set fields this parser owns.
+        // ArtifactFields.GROUP_ID.setString(metadata, ...);
+        // ArtifactFields.ARTIFACT_ID.setString(metadata, ...);
+        // ArtifactFields.VERSION.setString(metadata, ...);
+        // ArtifactFields.NAME.setString(metadata, ...);
+        // ArtifactFields.ID.setString(metadata, ArtifactFields.GROUP_ID.getString(metadata) + ":"
+        //         + ArtifactFields.ARTIFACT_ID.getString(metadata) + ":" + ArtifactFields.VERSION.getString(metadata));
+        ArtifactFields.PLUGIN_ID.setString(metadata, id());
 
-        // TODO: populate the required fields from the artifact's contents.
-        // metadata.setGroupId(...);
-        // metadata.setArtifactId(...);
-        // metadata.setVersion(...);
-        // metadata.setArtifactName(...);
-        // metadata.setId(metadata.getGroupId() + ":" + metadata.getArtifactId() + ":" + metadata.getVersion());
-        metadata.setPluginId(id());
-
-        try (InputStream input = Files.newInputStream(descriptor.contentPath())) {
-            metadata.setFileSizeBytes(input.readAllBytes().length);
+        try (InputStream input = Files.newInputStream(contentPath)) {
+            ArtifactFields.FILE_SIZE.setLong(metadata, (long) input.readAllBytes().length);
         }
-        metadata.setSha256(PathUtils.sha256(descriptor.contentPath()));
+        ArtifactFields.FILE_SHA256.setString(metadata, PathUtils.sha256(contentPath));
 
-        context.writeArtifact(descriptor, metadata);
+        context.writeArtifact(metadata, contentPath);
     }
 }

@@ -60,7 +60,9 @@ artifact-site-generator parse https://example.com/releases/example.vsix
 ```
 
 - Accepts any number of local paths and/or remote URLs in one call.
-- Loads parser plugins and picks the first one whose `supports(...)` matches the input.
+- Loads parser plugins and runs **every** one whose `supports(...)` matches the input against a single
+  shared artifact record (a `Datum`, see [Data model](#data-model)) - so more than one parser can
+  contribute fields to the same artifact, rather than each match producing a separate record.
 - Remote inputs are downloaded via Apache HttpClient 5 before parsing. Supports repeatable
   `--http-header "Name=Value"` options and TLS options (`--remote-tls-trust-store`,
   `--remote-tls-trust-store-password`, `--remote-tls-client-cert`, `--remote-tls-client-key`,
@@ -133,17 +135,25 @@ the home page and header.
 
 ## Data model
 
-Each catalog record (`ArtifactMetadata`) includes:
+Each catalog record is a `Datum`: a generic `namespace -> key -> value` bag (see [Plugin API](#plugin-api))
+rather than a fixed POJO, so any parser can read or write any field without a shared class to change. The
+default implementation is `MapDatum` - in-memory, and JSON-serializable through a stock Jackson
+`ObjectMapper` with no custom (de)serializers. Standard fields are addressed through typed `ArtifactFields`
+constants (e.g. `ArtifactFields.GROUP_ID.getString(datum)`) rather than getters/setters:
 
-- `id` (stable unique id, e.g., hash or `<group>:<artifact>:<version>`)
-- `artifactName`, `artifactId`, `groupId`, `version` - required
-- `description`, `authors` (list), `tags` (list), `license`
-- `createdAt` (parse timestamp)
-- `sourceType` (`local` or `remote`), `sourceValue` (local path or URL)
-- `downloadUrl`, `fileName`, `fileSizeBytes`, `sha256`
-- `pluginId` (which parser produced this record)
-- `readme` (raw README markdown discovered inside the artifact, if any - see below)
-- `iconData`, `iconFileName` (per-artifact icon override, if any - see [Parser icons](#parser-icons))
+- `ID` (stable unique id, e.g. `<group>:<artifact>:<version>`)
+- `NAME`, `ARTIFACT_ID`, `GROUP_ID`, `VERSION` - required
+- `DESCRIPTION`, `AUTHORS` (list), `TAGS` (list), `LICENSE`
+- `SOURCE_TYPE` (`local` or `remote`), `SOURCE_VALUE` (local path or URL)
+- `DOWNLOAD_URL`, `FILE_NAME`, `FILE_SIZE`, `FILE_SHA256`
+- `PLUGIN_ID` (which parser produced/last touched this record)
+- `README` (raw README markdown discovered inside the artifact, if any - see below)
+- `ICON_DATA`, `ICON_ORIGINAL_FILE_NAME` (per-artifact icon override, if any - see
+  [Parser icons](#parser-icons))
+
+Because a `Datum` can be shared across every parser that `supports(...)` a given input (see
+[`parse`](#parse)), a parser's `parse(...)` implementation should only set/add the fields it owns rather
+than assume it's the only contributor to the record.
 
 Parser-specific metadata sources:
 
@@ -158,9 +168,9 @@ Parser-specific metadata sources:
 
 ### README rendering
 
-A parser can populate `ArtifactMetadata.readme` with the raw markdown text of a README it finds inside the
-artifact (only the VSIX parser does this today, via the extension's packaged `readme.md`; the metadata field
-itself is generic, so any parser can support it). `generate` renders that markdown to HTML with
+A parser can populate `ArtifactFields.README` on the artifact's `Datum` with the raw markdown text of a
+README it finds inside the artifact (only the VSIX parser does this today, via the extension's packaged
+`readme.md`; the field itself is generic, so any parser can support it). `generate` renders that markdown to HTML with
 commonmark-java and makes it the main content of the artifact detail page, with **raw HTML in the source
 markdown escaped rather than passed through** - READMEs come from arbitrary third-party artifacts, so this
 keeps a malicious one from injecting a `<script>` or other active content into the generated site. An artifact
@@ -186,8 +196,8 @@ mvn archetype:generate \
   -DparserDisplayName="Example Format"
 ```
 
-`parserId` is the parser's stable `id()` (written into every parsed artifact's `pluginId` field and used for
-URL routing); `parserClassName` is the PascalCase prefix for the generated `${parserClassName}ArtifactParser`
+`parserId` is the parser's stable `id()` (written into every parsed artifact's `ArtifactFields.PLUGIN_ID`
+field and used for URL routing); `parserClassName` is the PascalCase prefix for the generated `${parserClassName}ArtifactParser`
 / `${parserClassName}ArtifactParserPlugin` classes; `parserDisplayName` is the UI-facing name. See the
 generated project's own `README.md` for next steps, and the [Plugin API](#plugin-api) section below for the
 contract being implemented.
@@ -197,21 +207,31 @@ contract being implemented.
 Defined in `artifact-site-plugins-api`:
 
 - `ArtifactParserPlugin` - PF4J extension point: `pluginId()`, `parser()`
-- `ArtifactParser` - `id()`, `displayName()`, `supports(ArtifactInputDescriptor)`,
-  `parse(ArtifactInputDescriptor, InputStream, ArtifactParseContext)`, `iconResourceName()`, `openIconStream()`,
+- `ArtifactParser` - `id()`, `displayName()`, `supports(Datum)`,
+  `parse(Datum, Path, IArtifactParseContext)`, `iconResourceName()`, `openIconStream()`,
   `installGuideResourceName()` (optional), `openInstallGuideStream()`, `seoTags()` (optional)
-- `ArtifactInputDescriptor` - input type, file name, extension, content type hints
-- `IArtifactParseContext` - checksum utilities, safe temp workspace, metadata writer helpers
+- `Datum` - a generic `namespace -> key -> value` artifact record (String/Long/UUID/`ZonedDateTime`
+  scalars, lists, and maps); list/map getters auto-vivify (create and store an empty collection the first
+  time they're read), so a parser populates one by mutating the returned collection directly
+- `DatumField` / `ArtifactFields` - typed accessors over a `Datum` (e.g. `ArtifactFields.GROUP_ID`), so
+  parsers and the CLI address fields by a shared, documented constant instead of a raw string key
+- `MapDatum` - the default `Datum` implementation: in-memory, and JSON-serializable through a stock Jackson
+  `ObjectMapper` (no custom modules needed, even for `UUID`/`ZonedDateTime`)
+- `IArtifactParseContext` - `createDatum()` (datum factory, defaults to `MapDatum`), `writeArtifact(Datum,
+  Path)` (catalog writer; the `Path` is the same local content path passed into `parse(...)`)
 
 Plugins decide artifact compatibility and produce normalized metadata only; they never write the catalog
-directly.
+directly - they go through `IArtifactParseContext.writeArtifact(...)`. Since every parser whose
+`supports(...)` matches a given input receives and enriches the *same* `Datum` (see
+[`parse`](#parse)/[Data model](#data-model)), calling `writeArtifact(...)` more than once for it (e.g.
+because two parsers both matched) is expected and harmless - it just re-upserts the same record.
 
 Two different ids are in play, and they're not interchangeable:
 
 - `ArtifactParserPlugin.pluginId()` is PF4J's identifier for the plugin/module itself (used by `list-plugins`
   and friends). It's independent of the parser it wraps.
 - `ArtifactParser.id()` is the parser's own stable identifier (e.g. `"maven"`, `"vsix"`) - this is what's
-  written into every artifact's `pluginId` catalog field, and what drives URL routing
+  written into every artifact's `ArtifactFields.PLUGIN_ID` catalog field, and what drives URL routing
   (`/artifacts/<id>/...`) and grouping. A plugin could in principle expose a parser whose `id()` differs from
   its `pluginId()`, though today each plugin wraps exactly one parser and the two happen to match.
 
@@ -233,9 +253,9 @@ missing, or the plugin JAR is binary-incompatible with the current plugin API - 
 parser cards, artifact cards, and page headings instead of rendering with no icon.
 
 A parser can also override that default on a **per-artifact** basis by populating
-`ArtifactMetadata.iconData` (base64-encoded icon bytes) and `iconFileName` (the icon's original file name, used
-to derive its extension) from its own `parse()` implementation - no plugin API changes are needed, since these
-are plain `ArtifactMetadata` fields any parser can set. The VSIX parser is the first to do this: it reads the
+`ArtifactFields.ICON_DATA` (base64-encoded icon bytes) and `ICON_ORIGINAL_FILE_NAME` (the icon's original
+file name, used to derive its extension) from its own `parse()` implementation - no plugin API changes are
+needed, since these are plain `Datum` fields any parser can set. The VSIX parser is the first to do this: it reads the
 icon referenced by the packaged `package.json`'s `icon` field. `generate` writes each artifact's own icon (when
 present) to `assets/icons/artifacts/<parser-type>/<group-id>.<artifact-id>/<version>.<ext>` and uses it in
 place of the parser's default icon on that artifact's cards and detail page.

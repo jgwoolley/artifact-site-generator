@@ -2,7 +2,6 @@ package com.nf3t.artifactsite.plugin.maven;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.concurrent.atomic.AtomicReference;
@@ -11,25 +10,24 @@ import java.util.zip.ZipOutputStream;
 
 import org.junit.jupiter.api.Test;
 
-import com.nf3t.artifactsite.api.ArtifactInputDescriptor;
-import com.nf3t.artifactsite.api.ArtifactMetadata;
-import com.nf3t.artifactsite.api.ArtifactSourceType;
+import com.nf3t.artifactsite.api.ArtifactFields;
+import com.nf3t.artifactsite.api.Datum;
 import com.nf3t.artifactsite.api.IArtifactParseContext;
+import com.nf3t.artifactsite.api.MapDatum;
 
 class MavenArtifactParserTest {
 
     private final MavenArtifactParser parser = new MavenArtifactParser();
 
+    private static Datum withFileName(String fileName) {
+        Datum datum = new MapDatum();
+        ArtifactFields.FILE_NAME.setString(datum, fileName);
+        return datum;
+    }
+
     @Test
     void supportsJarFiles() {
-        ArtifactInputDescriptor descriptor = new ArtifactInputDescriptor(
-                null, ArtifactSourceType.LOCAL,
-                "/tmp/sample.jar",
-                "sample.jar",
-                "jar",
-                "application/java-archive");
-
-        assertThat(parser.supports(descriptor)).isTrue();
+        assertThat(parser.supports(withFileName("sample.jar"))).isTrue();
     }
 
     @Test
@@ -60,34 +58,28 @@ class MavenArtifactParserTest {
             out.closeEntry();
         }
 
-        final AtomicReference<ArtifactMetadata> metadataRef = new AtomicReference<>();
-        try (InputStream input = Files.newInputStream(jar)) {
-            parser.parse(new ArtifactInputDescriptor(
-            		jar, ArtifactSourceType.LOCAL,
-                    jar.toString(),
-                    "demo-1.2.3.jar",
-                    "jar",
-                    "application/java-archive"), new IArtifactParseContext() {
-						@Override
-						public void writeArtifact(ArtifactInputDescriptor descriptor, ArtifactMetadata artifact) {
-							metadataRef.set(artifact);
-						}
-            });
-        }
-        
-        ArtifactMetadata metadata = metadataRef.get();
+        final AtomicReference<Datum> metadataRef = new AtomicReference<>();
+        Datum datum = withFileName("demo-1.2.3.jar");
+        parser.parse(datum, jar, new IArtifactParseContext() {
+            @Override
+            public void writeArtifact(Datum artifact, Path contentPath) {
+                metadataRef.set(artifact);
+            }
+        });
 
-        assertThat(metadata.getGroupId()).isEqualTo("com.acme");
-        assertThat(metadata.getArtifactId()).isEqualTo("demo");
-        assertThat(metadata.getVersion()).isEqualTo("1.2.3");
-        assertThat(metadata.getArtifactName()).isEqualTo("Demo Project");
-        assertThat(metadata.getDescription()).isEqualTo("A human-readable demo description.");
-        assertThat(metadata.getAuthors()).containsExactly("Jane Developer");
-        assertThat(metadata.getId()).isEqualTo("com.acme:demo:1.2.3");
-        assertThat(metadata.getPluginId()).isEqualTo("maven");
-        assertThat(metadata.getScmUrl()).isEqualTo("https://github.com/acme/demo");
-        assertThat(metadata.getSha256()).isNotBlank();
-        assertThat(metadata.getFileSizeBytes()).isPositive();
+        Datum metadata = metadataRef.get();
+
+        assertThat(ArtifactFields.GROUP_ID.getString(metadata)).isEqualTo("com.acme");
+        assertThat(ArtifactFields.ARTIFACT_ID.getString(metadata)).isEqualTo("demo");
+        assertThat(ArtifactFields.VERSION.getString(metadata)).isEqualTo("1.2.3");
+        assertThat(ArtifactFields.NAME.getString(metadata)).isEqualTo("Demo Project");
+        assertThat(ArtifactFields.DESCRIPTION.getString(metadata)).isEqualTo("A human-readable demo description.");
+        assertThat(ArtifactFields.AUTHORS.getStringList(metadata)).containsExactly("Jane Developer");
+        assertThat(ArtifactFields.ID.getString(metadata)).isEqualTo("com.acme:demo:1.2.3");
+        assertThat(ArtifactFields.PLUGIN_ID.getString(metadata)).isEqualTo("maven");
+        assertThat(ArtifactFields.SCM_URL.getString(metadata)).isEqualTo("https://github.com/acme/demo");
+        assertThat(ArtifactFields.FILE_SHA256.getString(metadata)).isNotBlank();
+        assertThat(ArtifactFields.FILE_SIZE.getLong(metadata)).isPositive();
     }
 
     @Test
@@ -111,24 +103,18 @@ class MavenArtifactParserTest {
             out.closeEntry();
         }
 
-        final AtomicReference<ArtifactMetadata> metadataRef = new AtomicReference<>();
-        try (InputStream input = Files.newInputStream(jar)) {
-            parser.parse(new ArtifactInputDescriptor(
-            		jar, ArtifactSourceType.LOCAL,
-                    jar.toString(),
-                    "demo-1.2.3-all.jar",
-                    "jar",
-                    "application/java-archive"), new IArtifactParseContext() {
-				@Override
-				public void writeArtifact(ArtifactInputDescriptor descriptor, ArtifactMetadata artifact) {
-					metadataRef.set(artifact);
-				}
-    });
-        }
-        ArtifactMetadata metadata = metadataRef.get();
+        final AtomicReference<Datum> metadataRef = new AtomicReference<>();
+        Datum datum = withFileName("demo-1.2.3-all.jar");
+        parser.parse(datum, jar, new IArtifactParseContext() {
+            @Override
+            public void writeArtifact(Datum artifact, Path contentPath) {
+                metadataRef.set(artifact);
+            }
+        });
+        Datum metadata = metadataRef.get();
 
-        assertThat(metadata.getGroupId()).isEqualTo("com.acme");
-        assertThat(metadata.getArtifactId()).isEqualTo("demo");
-        assertThat(metadata.getVersion()).isEqualTo("1.2.3");
+        assertThat(ArtifactFields.GROUP_ID.getString(metadata)).isEqualTo("com.acme");
+        assertThat(ArtifactFields.ARTIFACT_ID.getString(metadata)).isEqualTo("demo");
+        assertThat(ArtifactFields.VERSION.getString(metadata)).isEqualTo("1.2.3");
     }
 }

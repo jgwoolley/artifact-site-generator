@@ -22,12 +22,12 @@ import org.pf4j.PluginClassLoader;
 import org.pf4j.PluginLoader;
 import org.slf4j.LoggerFactory;
 
-import com.nf3t.artifactsite.api.ArtifactInputDescriptor;
-import com.nf3t.artifactsite.api.ArtifactMetadata;
+import com.nf3t.artifactsite.api.ArtifactFields;
 import com.nf3t.artifactsite.api.ArtifactParser;
 import com.nf3t.artifactsite.api.ArtifactParserPlugin;
-import com.nf3t.artifactsite.api.ArtifactSourceType;
+import com.nf3t.artifactsite.api.Datum;
 import com.nf3t.artifactsite.api.IArtifactParseContext;
+import com.nf3t.artifactsite.api.MapDatum;
 
 import picocli.CommandLine;
 import tools.jackson.databind.ObjectMapper;
@@ -70,12 +70,12 @@ class ArtifactSiteGeneratorCliTest {
             }
 
             @Override
-            public boolean supports(com.nf3t.artifactsite.api.ArtifactInputDescriptor descriptor) {
+            public boolean supports(Datum datum) {
                 return false;
             }
 
 			@Override
-			public void parse(ArtifactInputDescriptor descriptor, IArtifactParseContext context) throws Exception {
+			public void parse(Datum datum, Path contentPath, IArtifactParseContext context) throws Exception {
 				// TODO Auto-generated method stub
 				
 			}
@@ -129,12 +129,12 @@ class ArtifactSiteGeneratorCliTest {
                     }
 
                     @Override
-                    public boolean supports(com.nf3t.artifactsite.api.ArtifactInputDescriptor descriptor) {
+                    public boolean supports(Datum datum) {
                         return false;
                     }
 
                     @Override
-        			public void parse(ArtifactInputDescriptor descriptor, IArtifactParseContext context) throws Exception {
+        			public void parse(Datum datum, Path contentPath, IArtifactParseContext context) throws Exception {
         				// TODO Auto-generated method stub
         				
         			}
@@ -213,17 +213,11 @@ class ArtifactSiteGeneratorCliTest {
                 List.of(),
                 new ArtifactsByParser());
 
-        ArtifactInputDescriptor descriptor = new ArtifactInputDescriptor(
-                cachedFile,
-                ArtifactSourceType.REMOTE,
-                "https://example.com/sample.vsix",
-                "sample.vsix",
-                "vsix",
-                "application/octet-stream");
-
-        ArtifactMetadata artifact = new ArtifactMetadata();
-        artifact.setId("publisher:sample:1.0.0");
-        context.writeArtifact(descriptor, artifact);
+        Datum artifact = new MapDatum();
+        ArtifactFields.ID.setString(artifact, "publisher:sample:1.0.0");
+        ArtifactFields.SOURCE_TYPE.setString(artifact, "remote");
+        ArtifactFields.SOURCE_VALUE.setString(artifact, "https://example.com/sample.vsix");
+        context.writeArtifact(artifact, cachedFile);
 
         RemoteRequestConfig saved = store.getRequestsByArtifactId().get("publisher:sample:1.0.0");
         assertThat(saved).isNotNull();
@@ -240,27 +234,27 @@ class ArtifactSiteGeneratorCliTest {
     @Test
     void laterEqualArtifactReplacesEarlierRecord() {
         ArtifactsByParser artifacts = new ArtifactsByParser();
-        com.nf3t.artifactsite.api.ArtifactMetadata first = new com.nf3t.artifactsite.api.ArtifactMetadata();
-        first.setPluginId("vsix");
-        first.setGroupId("acme");
-        first.setArtifactId("demo");
-        first.setVersion("1.0.0");
-        first.setId("acme:demo:1.0.0");
-        first.setDescription("old");
+        Datum first = new MapDatum();
+        ArtifactFields.PLUGIN_ID.setString(first, "vsix");
+        ArtifactFields.GROUP_ID.setString(first, "acme");
+        ArtifactFields.ARTIFACT_ID.setString(first, "demo");
+        ArtifactFields.VERSION.setString(first, "1.0.0");
+        ArtifactFields.ID.setString(first, "acme:demo:1.0.0");
+        ArtifactFields.DESCRIPTION.setString(first, "old");
 
-        com.nf3t.artifactsite.api.ArtifactMetadata latest = new com.nf3t.artifactsite.api.ArtifactMetadata();
-        latest.setPluginId("vsix");
-        latest.setGroupId("acme");
-        latest.setArtifactId("demo");
-        latest.setVersion("1.0.0");
-        latest.setId("acme:demo:1.0.0");
-        latest.setDescription("new");
+        Datum latest = new MapDatum();
+        ArtifactFields.PLUGIN_ID.setString(latest, "vsix");
+        ArtifactFields.GROUP_ID.setString(latest, "acme");
+        ArtifactFields.ARTIFACT_ID.setString(latest, "demo");
+        ArtifactFields.VERSION.setString(latest, "1.0.0");
+        ArtifactFields.ID.setString(latest, "acme:demo:1.0.0");
+        ArtifactFields.DESCRIPTION.setString(latest, "new");
 
         artifacts.put(first);
         artifacts.put(latest);
 
         assertThat(artifacts.save()).singleElement().extracting(
-                com.nf3t.artifactsite.api.ArtifactMetadata::getDescription).isEqualTo("new");
+                (Datum artifact) -> ArtifactFields.DESCRIPTION.getString(artifact)).isEqualTo("new");
     }
 
     @Test
@@ -270,31 +264,31 @@ class ArtifactSiteGeneratorCliTest {
         Path localArtifact = tempDir.resolve("demo-2.0.0.vsix");
         Files.writeString(localArtifact, "artifact-bytes");
 
-        com.nf3t.artifactsite.api.ArtifactMetadata v1 = new com.nf3t.artifactsite.api.ArtifactMetadata();
-        v1.setPluginId("vsix");
-        v1.setGroupId("acme");
-        v1.setArtifactId("demo");
-        v1.setArtifactName("Acme Demo");
-        v1.setVersion("1.0.0");
-        v1.setDescription("first release");
-        v1.setTags(List.of("analytics", "etl"));
-        v1.setSourceType("remote");
-        v1.setSourceValue("https://example.com/acme-demo-1.0.0.vsix");
-        v1.setDownloadUrl("https://example.com/acme-demo-1.0.0.vsix");
+        Datum v1 = new MapDatum();
+        ArtifactFields.PLUGIN_ID.setString(v1, "vsix");
+        ArtifactFields.GROUP_ID.setString(v1, "acme");
+        ArtifactFields.ARTIFACT_ID.setString(v1, "demo");
+        ArtifactFields.NAME.setString(v1, "Acme Demo");
+        ArtifactFields.VERSION.setString(v1, "1.0.0");
+        ArtifactFields.DESCRIPTION.setString(v1, "first release");
+        ArtifactFields.TAGS.getStringList(v1).addAll(List.of("analytics", "etl"));
+        ArtifactFields.SOURCE_TYPE.setString(v1, "remote");
+        ArtifactFields.SOURCE_VALUE.setString(v1, "https://example.com/acme-demo-1.0.0.vsix");
+        ArtifactFields.DOWNLOAD_URL.setString(v1, "https://example.com/acme-demo-1.0.0.vsix");
 
-        com.nf3t.artifactsite.api.ArtifactMetadata v2 = new com.nf3t.artifactsite.api.ArtifactMetadata();
-        v2.setPluginId("vsix");
-        v2.setGroupId("acme");
-        v2.setArtifactId("demo");
-        v2.setArtifactName("Acme Demo");
-        v2.setVersion("2.0.0");
-        v2.setDescription("second release");
-        v2.setTags(List.of("analytics", "catalog"));
-        v2.setSourceType("local");
-        v2.setSourceValue(localArtifact.toString());
-        v2.setFileName("demo-2.0.0.vsix");
-        v2.setFileSizeBytes(2048L);
-        v2.setReadme("# Demo\n\nThis is the **readme** body.");
+        Datum v2 = new MapDatum();
+        ArtifactFields.PLUGIN_ID.setString(v2, "vsix");
+        ArtifactFields.GROUP_ID.setString(v2, "acme");
+        ArtifactFields.ARTIFACT_ID.setString(v2, "demo");
+        ArtifactFields.NAME.setString(v2, "Acme Demo");
+        ArtifactFields.VERSION.setString(v2, "2.0.0");
+        ArtifactFields.DESCRIPTION.setString(v2, "second release");
+        ArtifactFields.TAGS.getStringList(v2).addAll(List.of("analytics", "catalog"));
+        ArtifactFields.SOURCE_TYPE.setString(v2, "local");
+        ArtifactFields.SOURCE_VALUE.setString(v2, localArtifact.toString());
+        ArtifactFields.FILE_NAME.setString(v2, "demo-2.0.0.vsix");
+        ArtifactFields.FILE_SIZE.setLong(v2, 2048L);
+        ArtifactFields.README.setString(v2, "# Demo\n\nThis is the **readme** body.");
 
         OBJECT_MAPPER.writeValue(artifactJson.toFile(), List.of(v1, v2));
 
@@ -366,15 +360,15 @@ class ArtifactSiteGeneratorCliTest {
         Path artifactJson = tempDir.resolve("artifacts.json");
         Path outputDir = tempDir.resolve("public");
 
-        com.nf3t.artifactsite.api.ArtifactMetadata artifact = new com.nf3t.artifactsite.api.ArtifactMetadata();
-        artifact.setPluginId("no-icon-parser-" + System.nanoTime());
-        artifact.setGroupId("acme");
-        artifact.setArtifactId("demo");
-        artifact.setArtifactName("Acme Demo");
-        artifact.setVersion("1.0.0");
-        artifact.setSourceType("remote");
-        artifact.setSourceValue("https://example.com/acme-demo-1.0.0.jar");
-        artifact.setDownloadUrl("https://example.com/acme-demo-1.0.0.jar");
+        Datum artifact = new MapDatum();
+        ArtifactFields.PLUGIN_ID.setString(artifact, "no-icon-parser-" + System.nanoTime());
+        ArtifactFields.GROUP_ID.setString(artifact, "acme");
+        ArtifactFields.ARTIFACT_ID.setString(artifact, "demo");
+        ArtifactFields.NAME.setString(artifact, "Acme Demo");
+        ArtifactFields.VERSION.setString(artifact, "1.0.0");
+        ArtifactFields.SOURCE_TYPE.setString(artifact, "remote");
+        ArtifactFields.SOURCE_VALUE.setString(artifact, "https://example.com/acme-demo-1.0.0.jar");
+        ArtifactFields.DOWNLOAD_URL.setString(artifact, "https://example.com/acme-demo-1.0.0.jar");
 
         OBJECT_MAPPER.writeValue(artifactJson.toFile(), List.of(artifact));
 
@@ -403,15 +397,15 @@ class ArtifactSiteGeneratorCliTest {
         Files.writeString(customFavicon, "fake-png-bytes");
 
         String parserId = "custom-title-parser-" + System.nanoTime();
-        com.nf3t.artifactsite.api.ArtifactMetadata artifact = new com.nf3t.artifactsite.api.ArtifactMetadata();
-        artifact.setPluginId(parserId);
-        artifact.setGroupId("acme");
-        artifact.setArtifactId("demo");
-        artifact.setArtifactName("Acme Demo");
-        artifact.setVersion("1.0.0");
-        artifact.setSourceType("remote");
-        artifact.setSourceValue("https://example.com/acme-demo-1.0.0.jar");
-        artifact.setDownloadUrl("https://example.com/acme-demo-1.0.0.jar");
+        Datum artifact = new MapDatum();
+        ArtifactFields.PLUGIN_ID.setString(artifact, parserId);
+        ArtifactFields.GROUP_ID.setString(artifact, "acme");
+        ArtifactFields.ARTIFACT_ID.setString(artifact, "demo");
+        ArtifactFields.NAME.setString(artifact, "Acme Demo");
+        ArtifactFields.VERSION.setString(artifact, "1.0.0");
+        ArtifactFields.SOURCE_TYPE.setString(artifact, "remote");
+        ArtifactFields.SOURCE_VALUE.setString(artifact, "https://example.com/acme-demo-1.0.0.jar");
+        ArtifactFields.DOWNLOAD_URL.setString(artifact, "https://example.com/acme-demo-1.0.0.jar");
 
         OBJECT_MAPPER.writeValue(artifactJson.toFile(), List.of(artifact));
 
@@ -457,17 +451,17 @@ class ArtifactSiteGeneratorCliTest {
         Path artifactJson = tempDir.resolve("artifacts.json");
         Path outputDir = tempDir.resolve("public");
 
-        com.nf3t.artifactsite.api.ArtifactMetadata artifact = new com.nf3t.artifactsite.api.ArtifactMetadata();
-        artifact.setPluginId("seo-test-parser-" + System.nanoTime());
-        artifact.setGroupId("acme");
-        artifact.setArtifactId("demo");
-        artifact.setArtifactName("Acme Demo");
-        artifact.setVersion("1.0.0");
-        artifact.setDescription("A demo artifact");
-        artifact.setTags(List.of("etl", "catalog"));
-        artifact.setSourceType("remote");
-        artifact.setSourceValue("https://example.com/acme-demo-1.0.0.jar");
-        artifact.setDownloadUrl("https://example.com/acme-demo-1.0.0.jar");
+        Datum artifact = new MapDatum();
+        ArtifactFields.PLUGIN_ID.setString(artifact, "seo-test-parser-" + System.nanoTime());
+        ArtifactFields.GROUP_ID.setString(artifact, "acme");
+        ArtifactFields.ARTIFACT_ID.setString(artifact, "demo");
+        ArtifactFields.NAME.setString(artifact, "Acme Demo");
+        ArtifactFields.VERSION.setString(artifact, "1.0.0");
+        ArtifactFields.DESCRIPTION.setString(artifact, "A demo artifact");
+        ArtifactFields.TAGS.getStringList(artifact).addAll(List.of("etl", "catalog"));
+        ArtifactFields.SOURCE_TYPE.setString(artifact, "remote");
+        ArtifactFields.SOURCE_VALUE.setString(artifact, "https://example.com/acme-demo-1.0.0.jar");
+        ArtifactFields.DOWNLOAD_URL.setString(artifact, "https://example.com/acme-demo-1.0.0.jar");
 
         OBJECT_MAPPER.writeValue(artifactJson.toFile(), List.of(artifact));
 
@@ -490,7 +484,7 @@ class ArtifactSiteGeneratorCliTest {
 
         String detailPage = Files.readString(
                 outputDir.resolve("artifacts")
-                        .resolve(artifact.getPluginId())
+                        .resolve(ArtifactFields.PLUGIN_ID.getString(artifact))
                         .resolve("acme.demo")
                         .resolve("1.0.0")
                         .resolve("index.html"));
@@ -509,18 +503,18 @@ class ArtifactSiteGeneratorCliTest {
         Path outputDir = tempDir.resolve("public");
         String tag = "demo-tag-" + System.nanoTime();
 
-        com.nf3t.artifactsite.api.ArtifactMetadata artifact = new com.nf3t.artifactsite.api.ArtifactMetadata();
-        artifact.setPluginId("tag-icon-parser-" + System.nanoTime());
-        artifact.setGroupId("acme");
-        artifact.setArtifactId("demo");
-        artifact.setArtifactName("Acme Demo");
-        artifact.setVersion("1.0.0");
-        artifact.setTags(List.of(tag));
-        artifact.setSourceType("remote");
-        artifact.setSourceValue("https://example.com/acme-demo-1.0.0.jar");
-        artifact.setDownloadUrl("https://example.com/acme-demo-1.0.0.jar");
-        artifact.setIconData(Base64.getEncoder().encodeToString("fake-png-bytes".getBytes()));
-        artifact.setIconFileName("icon.png");
+        Datum artifact = new MapDatum();
+        ArtifactFields.PLUGIN_ID.setString(artifact, "tag-icon-parser-" + System.nanoTime());
+        ArtifactFields.GROUP_ID.setString(artifact, "acme");
+        ArtifactFields.ARTIFACT_ID.setString(artifact, "demo");
+        ArtifactFields.NAME.setString(artifact, "Acme Demo");
+        ArtifactFields.VERSION.setString(artifact, "1.0.0");
+        ArtifactFields.TAGS.getStringList(artifact).add(tag);
+        ArtifactFields.SOURCE_TYPE.setString(artifact, "remote");
+        ArtifactFields.SOURCE_VALUE.setString(artifact, "https://example.com/acme-demo-1.0.0.jar");
+        ArtifactFields.DOWNLOAD_URL.setString(artifact, "https://example.com/acme-demo-1.0.0.jar");
+        ArtifactFields.ICON_DATA.setString(artifact, Base64.getEncoder().encodeToString("fake-png-bytes".getBytes()));
+        ArtifactFields.ICON_ORIGINAL_FILE_NAME.setString(artifact, "icon.png");
 
         OBJECT_MAPPER.writeValue(artifactJson.toFile(), List.of(artifact));
 
@@ -530,7 +524,7 @@ class ArtifactSiteGeneratorCliTest {
         assertThat(exitCode).isZero();
 
         String tagPage = Files.readString(outputDir.resolve("tags").resolve(tag).resolve("index.html"));
-        String expectedIconPath = "../../assets/icons/artifacts/" + artifact.getPluginId() + "/acme.demo/1.0.0.png";
+        String expectedIconPath = "../../assets/icons/artifacts/" + ArtifactFields.PLUGIN_ID.getString(artifact) + "/acme.demo/1.0.0.png";
         assertThat(tagPage).contains("<meta property=\"og:image\" content=\"" + expectedIconPath + "\">");
         assertThat(tagPage).contains("<meta name=\"twitter:image\" content=\"" + expectedIconPath + "\">");
         assertThat(tagPage).contains("class=\"page-icon\" src=\"" + expectedIconPath + "\"");

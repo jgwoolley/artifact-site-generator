@@ -4,11 +4,11 @@ import java.io.ByteArrayInputStream;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Objects;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
@@ -19,9 +19,9 @@ import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 import org.w3c.dom.NodeList;
 
-import com.nf3t.artifactsite.api.ArtifactInputDescriptor;
-import com.nf3t.artifactsite.api.ArtifactMetadata;
+import com.nf3t.artifactsite.api.ArtifactFields;
 import com.nf3t.artifactsite.api.ArtifactParser;
+import com.nf3t.artifactsite.api.Datum;
 import com.nf3t.artifactsite.api.IArtifactParseContext;
 import com.nf3t.artifactsite.api.PathUtils;
 
@@ -74,22 +74,20 @@ public class VsixArtifactParser implements ArtifactParser {
 
     /** {@inheritDoc} */
     @Override
-    public boolean supports(@Nullable ArtifactInputDescriptor descriptor) {
-        if (descriptor == null || descriptor.fileName() == null) {
+    public boolean supports(@Nullable Datum datum) {
+        if (datum == null) {
             return false;
         }
-        return descriptor.fileName().toLowerCase().endsWith(".vsix")
-                || Objects.equals("vsix", descriptor.extension());
+        String fileName = ArtifactFields.FILE_NAME.getString(datum);
+        return fileName != null && fileName.toLowerCase().endsWith(".vsix");
     }
 
     /** {@inheritDoc} */
     @Override
-    public void parse(ArtifactInputDescriptor descriptor, IArtifactParseContext context)
+    public void parse(Datum metadata, Path contentPath, IArtifactParseContext context)
             throws Exception {
-    	
-        ArtifactMetadata metadata = new ArtifactMetadata();
 
-    	try(InputStream input = Files.newInputStream(descriptor.contentPath())) {
+    	try(InputStream input = Files.newInputStream(contentPath)) {
     		byte[] content = input.readAllBytes();
 
             // 1. Parse the document ONCE
@@ -103,35 +101,35 @@ public class VsixArtifactParser implements ArtifactParser {
             String groupId = identity.getAttribute("Publisher");
             PackageMetadata packageMetadata = readPackageMetadata(content);
             String artifactName = firstNonBlank(packageMetadata.displayName(), readDisplayName(doc, artifactId), artifactId);
-            
+
             // Extract the Source URL property
             String sourceUrl = firstNonBlank(
                     packageMetadata.repositoryUrl(),
                     readProperty(doc, SOURCE_LINK_PROPERTY));
 
             // 3. Populate metadata
-            metadata.setArtifactId(artifactId);
-            metadata.setVersion(version);
-            metadata.setGroupId(groupId);
-            metadata.setArtifactName(artifactName);
-            metadata.setDescription(firstNonBlank(packageMetadata.description(), readDescription(doc)));
-            metadata.setAuthors(packageMetadata.authors());
-            metadata.setId(groupId + ":" + artifactId + ":" + version);
-            metadata.setFileSizeBytes(content.length);
-            metadata.setPluginId(id());
-            metadata.setScmUrl(sourceUrl);
-            metadata.setReadme(readReadme(content));
+            ArtifactFields.ARTIFACT_ID.setString(metadata, artifactId);
+            ArtifactFields.VERSION.setString(metadata, version);
+            ArtifactFields.GROUP_ID.setString(metadata, groupId);
+            ArtifactFields.NAME.setString(metadata, artifactName);
+            ArtifactFields.DESCRIPTION.setString(metadata, firstNonBlank(packageMetadata.description(), readDescription(doc)));
+            ArtifactFields.AUTHORS.getStringList(metadata).addAll(packageMetadata.authors());
+            ArtifactFields.ID.setString(metadata, groupId + ":" + artifactId + ":" + version);
+            ArtifactFields.FILE_SIZE.setLong(metadata, (long) content.length);
+            ArtifactFields.PLUGIN_ID.setString(metadata, id());
+            ArtifactFields.SCM_URL.setString(metadata, sourceUrl);
+            ArtifactFields.README.setString(metadata, readReadme(content));
 
             byte[] iconBytes = readIcon(content, packageMetadata.packageJsonDir(), packageMetadata.iconPath());
             if (iconBytes != null && iconBytes.length > 0) {
-                metadata.setIconData(Base64.getEncoder().encodeToString(iconBytes));
-                metadata.setIconFileName(iconFileNameFrom(packageMetadata.iconPath()));
+                ArtifactFields.ICON_DATA.setString(metadata, Base64.getEncoder().encodeToString(iconBytes));
+                ArtifactFields.ICON_ORIGINAL_FILE_NAME.setString(metadata, iconFileNameFrom(packageMetadata.iconPath()));
             }
     	}
-    	
-    	String sha256 = PathUtils.sha256(descriptor.contentPath());
-    	metadata.setSha256(sha256);
-        context.writeArtifact(descriptor, metadata);
+
+    	String sha256 = PathUtils.sha256(contentPath);
+    	ArtifactFields.FILE_SHA256.setString(metadata, sha256);
+        context.writeArtifact(metadata, contentPath);
     }
 
     /**

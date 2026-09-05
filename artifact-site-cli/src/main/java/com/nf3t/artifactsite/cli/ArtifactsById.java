@@ -4,7 +4,8 @@ import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-import com.nf3t.artifactsite.api.ArtifactMetadata;
+import com.nf3t.artifactsite.api.ArtifactFields;
+import com.nf3t.artifactsite.api.Datum;
 
 /**
  * Groups artifact versions by artifact slug.
@@ -21,8 +22,8 @@ public class ArtifactsById implements Iterable<ArtifactsByVersion> {
 	 *
 	 * @param artifact artifact metadata to store
 	 */
-	public void put(ArtifactMetadata artifact) {
-		String slug = artifact.getArtifactSlug();
+	public void put(Datum artifact) {
+		String slug = ArtifactFields.getArtifactSlug(artifact);
 		ArtifactsByVersion value = artifactsBySlug.get(slug);
 		if(value == null) {
 			value = new ArtifactsByVersion();

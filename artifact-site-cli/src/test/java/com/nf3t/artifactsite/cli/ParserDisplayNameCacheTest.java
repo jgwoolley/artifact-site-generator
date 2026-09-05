@@ -10,7 +10,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.slf4j.LoggerFactory;
 
-import com.nf3t.artifactsite.api.ArtifactInputDescriptor;
+import com.nf3t.artifactsite.api.Datum;
 import com.nf3t.artifactsite.api.ArtifactParser;
 import com.nf3t.artifactsite.api.ArtifactParserPlugin;
 import com.nf3t.artifactsite.api.IArtifactParseContext;
@@ -48,12 +48,12 @@ class ParserDisplayNameCacheTest {
             }
 
             @Override
-            public boolean supports(ArtifactInputDescriptor descriptor) {
+            public boolean supports(Datum datum) {
                 return false;
             }
 
             @Override
-            public void parse(ArtifactInputDescriptor descriptor, IArtifactParseContext context) {
+            public void parse(Datum datum, java.nio.file.Path contentPath, IArtifactParseContext context) {
             }
 
             @Override
@@ -104,12 +104,12 @@ class ParserDisplayNameCacheTest {
             }
 
             @Override
-            public boolean supports(ArtifactInputDescriptor descriptor) {
+            public boolean supports(Datum datum) {
                 return false;
             }
 
             @Override
-            public void parse(ArtifactInputDescriptor descriptor, IArtifactParseContext context) {
+            public void parse(Datum datum, java.nio.file.Path contentPath, IArtifactParseContext context) {
             }
 
             @Override
