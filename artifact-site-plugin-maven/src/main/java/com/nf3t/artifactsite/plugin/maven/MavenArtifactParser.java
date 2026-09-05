@@ -1,24 +1,23 @@
 package com.nf3t.artifactsite.plugin.maven;
 
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.Enumeration;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Properties;
 import java.util.zip.ZipEntry;
-import java.util.zip.ZipInputStream;
+import java.util.zip.ZipFile;
 
-import javax.xml.parsers.DocumentBuilderFactory;
-
+import org.apache.maven.model.Developer;
+import org.apache.maven.model.Model;
+import org.apache.maven.model.Scm;
+import org.apache.maven.model.io.xpp3.MavenXpp3Reader;
 import org.jspecify.annotations.Nullable;
-import org.w3c.dom.Element;
-import org.w3c.dom.NodeList;
 
 import com.nf3t.artifactsite.api.ArtifactInputDescriptor;
 import com.nf3t.artifactsite.api.ArtifactMetadata;
@@ -37,6 +36,11 @@ public class MavenArtifactParser implements ArtifactParser {
     private static final String INSTALL_GUIDE_RESOURCE_NAME = "install.html";
     private static final String PARSER_ID = "maven";
     private static final List<String> SEO_TAGS = List.of("maven", "java", "jar", "dependency", "artifact");
+    private final MavenXpp3Reader pomReader;
+
+    public MavenArtifactParser() {
+        this.pomReader = new MavenXpp3Reader();
+    }
 
     /** {@inheritDoc} */
     @Override
@@ -83,11 +87,13 @@ public class MavenArtifactParser implements ArtifactParser {
     @Override
     public void parse(ArtifactInputDescriptor descriptor, IArtifactParseContext context)
             throws Exception {
-    	
+
         ArtifactMetadata metadata = new ArtifactMetadata();
-    	try(InputStream input = Files.newInputStream(descriptor.contentPath())) {
-    		byte[] content = input.readAllBytes();
-            PomCandidate selected = selectPomCandidate(content, descriptor.fileName())
+        // ZipFile gives random-access reads straight off the file on disk - entries are
+        // located by index and streamed individually, so the JAR's bytes are never buffered
+        // into memory as a whole.
+        try (ZipFile zipFile = new ZipFile(descriptor.contentPath().toFile())) {
+            PomCandidate selected = selectPomCandidate(zipFile, descriptor.fileName())
                     .orElseThrow(() -> new IllegalArgumentException("JAR missing META-INF/maven/**/pom.properties"));
 
             metadata.setGroupId(selected.groupId());
@@ -95,150 +101,112 @@ public class MavenArtifactParser implements ArtifactParser {
             metadata.setVersion(selected.version());
             metadata.setArtifactName(selected.artifactId());
             metadata.setId(selected.groupId() + ":" + selected.artifactId() + ":" + selected.version());
-            PomModel pom = readPom(content, selected.path());
-            metadata.setDescription(firstNonBlank(pom.description(), selected.description()));
-            metadata.setAuthors(pom.authors());
-            metadata.setArtifactName(firstNonBlank(pom.name(), selected.artifactName(), selected.artifactId()));
-            metadata.setFileSizeBytes(content.length);
+
+            Optional<Model> pomModel = readPomModel(zipFile, selected.path());
+            metadata.setDescription(firstNonBlank(
+                    pomModel.map(Model::getDescription).orElse(null), selected.description()));
+            metadata.setAuthors(pomModel.map(MavenArtifactParser::readDevelopers).orElse(List.of()));
+            metadata.setArtifactName(firstNonBlank(
+                    pomModel.map(Model::getName).orElse(null), selected.artifactName(), selected.artifactId()));
             metadata.setPluginId(id());
-            metadata.setScmUrl(readScmUrl(content, selected.path()).orElse(null));
-    	}   
-    	
-    	String sha256 = PathUtils.sha256(descriptor.contentPath());
-    	metadata.setSha256(sha256);
+            metadata.setScmUrl(pomModel.flatMap(MavenArtifactParser::readScmUrl).orElse(null));
+        }
+
+        metadata.setFileSizeBytes(Files.size(descriptor.contentPath()));
+        metadata.setSha256(PathUtils.sha256(descriptor.contentPath()));
         context.writeArtifact(descriptor, metadata);
     }
 
-    private Optional<PomCandidate> selectPomCandidate(byte[] content, @Nullable String jarFileName) throws Exception {
+    private Optional<PomCandidate> selectPomCandidate(ZipFile zipFile, @Nullable String jarFileName) throws Exception {
         String jarBaseName = normalizeJarBaseName(jarFileName);
-        return readPomCandidates(content).stream()
+        return readPomCandidates(zipFile).stream()
                 .max(Comparator
                         .comparingInt((PomCandidate candidate) -> scoreCandidate(jarBaseName, candidate.artifactId(), candidate.version()))
                         .thenComparing(candidate -> candidate.path().length(), Comparator.reverseOrder()));
     }
 
-    private List<PomCandidate> readPomCandidates(byte[] content) throws Exception {
+    private List<PomCandidate> readPomCandidates(ZipFile zipFile) throws Exception {
         List<PomCandidate> candidates = new ArrayList<>();
-        try (ZipInputStream zipInput = new ZipInputStream(new ByteArrayInputStream(content))) {
-            ZipEntry entry;
-            while ((entry = zipInput.getNextEntry()) != null) {
-                if (entry.isDirectory()) {
-                    continue;
-                }
-                String path = entry.getName();
-                if (!path.startsWith(MAVEN_METADATA_PREFIX) || !path.endsWith(POM_PROPERTIES_SUFFIX)) {
-                    continue;
-                }
-
-                Properties properties = new Properties();
-                properties.load(new ByteArrayInputStream(readEntryBytes(zipInput)));
-
-                String groupId = trimToNull(properties.getProperty("groupId"));
-                String artifactId = trimToNull(properties.getProperty("artifactId"));
-                String version = trimToNull(properties.getProperty("version"));
-                String description = trimToNull(properties.getProperty("description"));
-                String name = trimToNull(properties.getProperty("name"));
-                if (groupId == null || artifactId == null || version == null) {
-                    continue;
-                }
-                candidates.add(new PomCandidate(path, groupId, artifactId, version, description, name));
+        Enumeration<? extends ZipEntry> entries = zipFile.entries();
+        while (entries.hasMoreElements()) {
+            ZipEntry entry = entries.nextElement();
+            if (entry.isDirectory()) {
+                continue;
             }
+            String path = entry.getName();
+            if (!path.startsWith(MAVEN_METADATA_PREFIX) || !path.endsWith(POM_PROPERTIES_SUFFIX)) {
+                continue;
+            }
+
+            Properties properties = new Properties();
+            try (InputStream entryStream = zipFile.getInputStream(entry)) {
+                // Properties.load streams the entry directly; nothing is buffered up front.
+                properties.load(entryStream);
+            }
+
+            String groupId = trimToNull(properties.getProperty("groupId"));
+            String artifactId = trimToNull(properties.getProperty("artifactId"));
+            String version = trimToNull(properties.getProperty("version"));
+            String description = trimToNull(properties.getProperty("description"));
+            String name = trimToNull(properties.getProperty("name"));
+            if (groupId == null || artifactId == null || version == null) {
+                continue;
+            }
+            candidates.add(new PomCandidate(path, groupId, artifactId, version, description, name));
         }
         return candidates;
     }
 
-    private Optional<String> readScmUrl(byte[] content, String pomPropertiesPath) {
+    /**
+     * Reads the embedded {@code pom.xml} paired with the given {@code pom.properties} entry
+     * using Maven's own {@link MavenXpp3Reader}, rather than hand-rolled DOM parsing.
+     */
+    private Optional<Model> readPomModel(ZipFile zipFile, String pomPropertiesPath) {
         String pomPath = pomXmlPath(pomPropertiesPath);
-        try (ZipInputStream zipInput = new ZipInputStream(new ByteArrayInputStream(content))) {
-            ZipEntry entry;
-            while ((entry = zipInput.getNextEntry()) != null) {
-                if (!pomPath.equals(entry.getName())) {
-                    continue;
-                }
-                var document = newDocumentBuilderFactory().newDocumentBuilder().parse(zipInput);
-                NodeList scmNodes = document.getElementsByTagName("scm");
-                if (scmNodes.getLength() == 0) {
-                    return Optional.empty();
-                }
-
-                Element scm = (Element) scmNodes.item(0);
-                String url = readElementText(scm, "url");
-                if (!isBlank(url)) {
-                    return Optional.of(url.trim());
-                }
-                String connection = readElementText(scm, "connection");
-                if (!isBlank(connection)) {
-                    return Optional.of(connection.trim());
-                }
-                return Optional.empty();
-            }
-        } catch (Exception ignored) {
+        ZipEntry pomEntry = zipFile.getEntry(pomPath);
+        if (pomEntry == null) {
             return Optional.empty();
+        }
+        try (InputStream entryStream = zipFile.getInputStream(pomEntry)) {
+            // MavenXpp3Reader.read(InputStream) streams the entry and auto-detects encoding
+            // from the XML declaration, returning the fully typed Maven Model.
+            return Optional.of(pomReader.read(entryStream, false));
+        } catch (Exception ignored) {
+            // pom.properties values remain valid fallbacks for malformed or absent POM XML.
+            return Optional.empty();
+        }
+    }
+
+    /** Resolves the SCM URL from a parsed Maven {@link Model}, falling back to the connection string. */
+    private static Optional<String> readScmUrl(Model model) {
+        Scm scm = model.getScm();
+        if (scm == null) {
+            return Optional.empty();
+        }
+        if (!isBlank(scm.getUrl())) {
+            return Optional.of(scm.getUrl().trim());
+        }
+        if (!isBlank(scm.getConnection())) {
+            return Optional.of(scm.getConnection().trim());
         }
         return Optional.empty();
     }
 
-    /** Reads the embedded POM's human-readable metadata. */
-    private PomModel readPom(byte[] content, String pomPropertiesPath) {
-        String pomPath = pomXmlPath(pomPropertiesPath);
-        try (ZipInputStream zipInput = new ZipInputStream(new ByteArrayInputStream(content))) {
-            ZipEntry entry;
-            while ((entry = zipInput.getNextEntry()) != null) {
-                if (pomPath.equals(entry.getName())) {
-                    var document = newDocumentBuilderFactory().newDocumentBuilder().parse(zipInput);
-                    Element project = document.getDocumentElement();
-                    return new PomModel(
-                            readDirectChildText(project, "name"),
-                            readDirectChildText(project, "description"),
-                            readDevelopers(project));
-                }
+    /** Reads developer names from a parsed Maven {@link Model}. */
+    private static List<String> readDevelopers(Model model) {
+        LinkedHashSet<String> authors = new LinkedHashSet<>();
+        for (Developer developer : model.getDevelopers()) {
+            String name = trimToNull(developer.getName());
+            if (name != null) {
+                authors.add(name);
             }
-        } catch (Exception ignored) {
-            // Properties values remain valid fallbacks for malformed or absent POM XML.
         }
-        return new PomModel(null, null, List.of());
-    }
-
-    /** Creates the secure XML parser used for embedded POM files. */
-    private static DocumentBuilderFactory newDocumentBuilderFactory() throws Exception {
-        DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
-        factory.setNamespaceAware(false);
-        factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
-        factory.setFeature("http://xml.org/sax/features/external-general-entities", false);
-        factory.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
-        factory.setExpandEntityReferences(false);
-        return factory;
+        return new ArrayList<>(authors);
     }
 
     /** Resolves the POM XML entry paired with a properties entry. */
     private static String pomXmlPath(String pomPropertiesPath) {
         return pomPropertiesPath.substring(0, pomPropertiesPath.length() - "pom.properties".length()) + "pom.xml";
-    }
-
-    /** Reads text from a direct child element. */
-    private static @Nullable String readDirectChildText(Element parent, String tagName) {
-        NodeList children = parent.getChildNodes();
-        for (int i = 0; i < children.getLength(); i++) {
-            if (children.item(i) instanceof Element child && tagName.equals(child.getTagName())) {
-                return trimToNull(child.getTextContent());
-            }
-        }
-        return null;
-    }
-
-    /** Reads developer names from the embedded Maven POM. */
-    private static List<String> readDevelopers(Element project) {
-        LinkedHashSet<String> authors = new LinkedHashSet<>();
-        NodeList developers = project.getElementsByTagName("developer");
-        for (int i = 0; i < developers.getLength(); i++) {
-            if (developers.item(i) instanceof Element developer) {
-                String name = readDirectChildText(developer, "name");
-                if (name != null) {
-                    authors.add(name);
-                }
-            }
-        }
-        return new ArrayList<>(authors);
     }
 
     /** Returns the first non-blank candidate. */
@@ -278,25 +246,6 @@ public class MavenArtifactParser implements ArtifactParser {
         return name;
     }
 
-    private static byte[] readEntryBytes(ZipInputStream zipInput) throws Exception {
-        ByteArrayOutputStream output = new ByteArrayOutputStream();
-        byte[] buffer = new byte[8192];
-        int read;
-        while ((read = zipInput.read(buffer)) != -1) {
-            output.write(buffer, 0, read);
-        }
-        return output.toByteArray();
-    }
-
-    private static @Nullable String readElementText(Element parent, String tagName) {
-        NodeList children = parent.getElementsByTagName(tagName);
-        if (children.getLength() == 0) {
-            return null;
-        }
-        String text = children.item(0).getTextContent();
-        return text == null ? null : text;
-    }
-
     private static @Nullable String trimToNull(@Nullable String value) {
         if (value == null) {
             return null;
@@ -307,9 +256,6 @@ public class MavenArtifactParser implements ArtifactParser {
 
     private static boolean isBlank(@Nullable String value) {
         return value == null || value.isBlank();
-    }
-
-    private record PomModel(@Nullable String name, @Nullable String description, List<String> authors) {
     }
 
     private record PomCandidate(

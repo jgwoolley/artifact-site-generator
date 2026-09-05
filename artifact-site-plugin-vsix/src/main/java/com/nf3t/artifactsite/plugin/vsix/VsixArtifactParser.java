@@ -274,8 +274,8 @@ public class VsixArtifactParser implements ArtifactParser {
         if (author == null) {
             return;
         }
-        if (author.isTextual()) {
-            String name = firstNonBlank(author.asText());
+        if (author.isString()) {
+            String name = firstNonBlank(author.asString());
             if (name != null) {
                 authors.add(name);
             }
@@ -293,8 +293,8 @@ public class VsixArtifactParser implements ArtifactParser {
         if (repository == null) {
             return null;
         }
-        if (repository.isTextual()) {
-            return firstNonBlank(repository.asText());
+        if (repository.isString()) {
+            return firstNonBlank(repository.asString());
         }
         return readJsonText(repository, "url");
     }
@@ -308,10 +308,10 @@ public class VsixArtifactParser implements ArtifactParser {
      */
     private @Nullable String readJsonText(JsonNode object, String property) {
         JsonNode value = object == null ? null : object.get(property);
-        if (value == null || !value.isTextual() || value.asText().isBlank()) {
+        if (value == null || !value.isString() || value.asString().isBlank()) {
             return null;
         }
-        return value.asText().trim();
+        return value.asString().trim();
     }
 
     /**
