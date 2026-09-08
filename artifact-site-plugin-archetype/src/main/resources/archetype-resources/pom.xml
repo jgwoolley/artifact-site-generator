@@ -62,19 +62,36 @@
           </annotationProcessorPaths>
         </configuration>
       </plugin>
+      <!-- pf4j's JarPluginLoader loads this module as a single jar, and its classloader only
+           forwards com.nf3t.artifactsite.api.* and org.pf4j.* classes from the host CLI - any
+           other dependency (beyond the provided ones above) must be bundled into this jar or it
+           will throw ClassNotFoundException at runtime. Shading is on by default here so adding a
+           dependency just works; do not work around a missing dependency by adding it to
+           artifact-site-cli's pom.xml instead. -->
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
-        <artifactId>maven-jar-plugin</artifactId>
-        <version>3.4.2</version>
-        <configuration>
-          <archive>
-            <manifestEntries>
-              <Plugin-Id>${parserId}</Plugin-Id>
-              <Plugin-Version>${symbol_dollar}{project.version}</Plugin-Version>
-              <Plugin-Provider>${pluginProvider}</Plugin-Provider>
-            </manifestEntries>
-          </archive>
-        </configuration>
+        <artifactId>maven-shade-plugin</artifactId>
+        <version>3.6.0</version>
+        <executions>
+          <execution>
+            <phase>package</phase>
+            <goals>
+              <goal>shade</goal>
+            </goals>
+            <configuration>
+              <createDependencyReducedPom>false</createDependencyReducedPom>
+              <transformers>
+                <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
+                  <manifestEntries>
+                    <Plugin-Id>${parserId}</Plugin-Id>
+                    <Plugin-Version>${symbol_dollar}{project.version}</Plugin-Version>
+                    <Plugin-Provider>${pluginProvider}</Plugin-Provider>
+                  </manifestEntries>
+                </transformer>
+              </transformers>
+            </configuration>
+          </execution>
+        </executions>
       </plugin>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>

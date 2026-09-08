@@ -47,8 +47,29 @@ public class MavenArtifactParser implements ArtifactParser {
     private final JAXBExtensionManifestParser nifiParser;
 
     public MavenArtifactParser() {
-    	this.nifiParser = new JAXBExtensionManifestParser();
+        this.nifiParser = createNifiParser();
         this.pomReader = new MavenXpp3Reader();
+    }
+
+    /**
+     * Builds the NiFi extension manifest parser.
+     *
+     * <p>{@link JAXBExtensionManifestParser} resolves its JAXB provider via
+     * {@code ServiceLoader}, which looks up {@code Thread.currentThread().getContextClassLoader()}
+     * rather than the classloader that loaded this class. Under pf4j, the thread's context
+     * classloader is the host application's classloader, which does not see the JAXB runtime
+     * shaded into this plugin's jar, so the lookup must be pointed at this class's own
+     * classloader for the duration of construction.
+     */
+    private static JAXBExtensionManifestParser createNifiParser() {
+        Thread currentThread = Thread.currentThread();
+        ClassLoader previousContextClassLoader = currentThread.getContextClassLoader();
+        currentThread.setContextClassLoader(MavenArtifactParser.class.getClassLoader());
+        try {
+            return new JAXBExtensionManifestParser();
+        } finally {
+            currentThread.setContextClassLoader(previousContextClassLoader);
+        }
     }
 
     /** {@inheritDoc} */

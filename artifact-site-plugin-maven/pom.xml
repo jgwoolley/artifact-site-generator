@@ -77,21 +77,37 @@
       </plugin>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
-        <artifactId>maven-jar-plugin</artifactId>
-        <version>3.4.2</version>
-        <configuration>
-          <archive>
-            <manifestEntries>
-              <Plugin-Id>maven</Plugin-Id>
-              <Plugin-Version>${project.version}</Plugin-Version>
-              <Plugin-Provider>jgwoolley</Plugin-Provider>
-            </manifestEntries>
-          </archive>
-        </configuration>
+        <artifactId>maven-surefire-plugin</artifactId>
       </plugin>
+      <!-- Plugin jars are loaded by pf4j's JarPluginLoader as a single file, so this
+           module's own (non-provided) dependencies must be shaded into that jar; the
+           host CLI only forwards com.nf3t.artifactsite.api.* and org.pf4j.* classes to
+           plugin classloaders (see ArtifactSiteGeneratorCli.ApiParentFirstPluginClassLoader),
+           so maven-model / nifi-extension-manifest-parser must live inside this jar. -->
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
-        <artifactId>maven-surefire-plugin</artifactId>
+        <artifactId>maven-shade-plugin</artifactId>
+        <version>3.6.0</version>
+        <executions>
+          <execution>
+            <phase>package</phase>
+            <goals>
+              <goal>shade</goal>
+            </goals>
+            <configuration>
+              <createDependencyReducedPom>false</createDependencyReducedPom>
+              <transformers>
+                <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
+                  <manifestEntries>
+                    <Plugin-Id>maven</Plugin-Id>
+                    <Plugin-Version>${project.version}</Plugin-Version>
+                    <Plugin-Provider>jgwoolley</Plugin-Provider>
+                  </manifestEntries>
+                </transformer>
+              </transformers>
+            </configuration>
+          </execution>
+        </executions>
       </plugin>
     </plugins>
   </build>

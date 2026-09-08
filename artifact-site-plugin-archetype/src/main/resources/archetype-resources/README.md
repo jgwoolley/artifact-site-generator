@@ -15,6 +15,15 @@ Artifact Site Generator parser plugin for ${parserDisplayName}, generated from t
 4. Update `artifact-site-plugins-api.version` and `pf4j.version` in `pom.xml` if targeting a
    different Artifact Site Generator release than the one this archetype defaulted to.
 
+## Adding dependencies
+
+This plugin is loaded by pf4j as a single jar, and its classloader only sees this jar's own
+contents plus `com.nf3t.artifactsite.api.*` / `org.pf4j.*` from the host CLI. `pom.xml` already
+shades this plugin's own dependencies into that jar (via `maven-shade-plugin`), so any dependency
+you add beyond `artifact-site-plugins-api` and `pf4j` (both `provided`, supplied by the host) just
+works — do not work around a missing dependency by adding it to `artifact-site-cli`'s `pom.xml`
+instead.
+
 ## Build and install
 
 ```sh
