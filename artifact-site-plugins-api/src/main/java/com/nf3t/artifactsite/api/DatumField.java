@@ -14,6 +14,7 @@ public interface DatumField {
 	public default String getString(Datum datum) { return datum.getString(getNamespace(), getKey());} ;
 	public default List<String> getStringList(Datum datum) { return datum.getStringList(getNamespace(), getKey());} ;
 	public default Map<String, String> getStringMap(Datum datum) { return datum.getStringMap(getNamespace(), getKey());} ;
+	public default List<Map<String, String>> getRecordList(Datum datum) { return datum.getRecordList(getNamespace(), getKey());} ;
 
 	public default Long setLong(Datum datum, Long value) { return datum.setLong(getNamespace(), getKey(), value);} ;
 	public default Long getLong(Datum datum) { return datum.getLong(getNamespace(), getKey());} ;

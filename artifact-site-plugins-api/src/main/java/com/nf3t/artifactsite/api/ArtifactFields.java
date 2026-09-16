@@ -10,6 +10,8 @@ public enum ArtifactFields implements DatumField {
 	README("readme", "raw README markdown discovered inside the artifact, if any"),
 	AUTHORS("authors", "list of artifact authors"),
 	TAGS("tags", "list of artifact tags"),
+	ARTIFACT_TYPES("artifact_types", "list of artifact type tags this artifact belongs to (e.g. \"jar\", \"nar\"), "
+			+ "used to select which detail page sections render for it - see {@link ArtifactSectionProvider}"),
 	LICENSE("license", "artifact license"),
 	SOURCE_TYPE("source_type", "artifact source type name"),
 	SOURCE_VALUE("source_value", "artifact source value"),

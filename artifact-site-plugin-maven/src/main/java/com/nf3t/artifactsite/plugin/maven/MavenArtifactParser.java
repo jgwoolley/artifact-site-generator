@@ -6,8 +6,10 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.Enumeration;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Properties;
 import java.util.zip.ZipEntry;
@@ -43,6 +45,12 @@ public class MavenArtifactParser implements ArtifactParser {
     private static final String INSTALL_GUIDE_RESOURCE_NAME = "install.html";
     private static final String PARSER_ID = "maven";
     private static final List<String> SEO_TAGS = List.of("maven", "java", "jar", "dependency", "artifact");
+    /** Artifact type tag (see {@link ArtifactFields#ARTIFACT_TYPES}) for every JAR/WAR/NAR this parser handles. */
+    static final String ARTIFACT_TYPE_JAR = "jar";
+    /** Artifact type tag added on top of {@link #ARTIFACT_TYPE_JAR} when a NiFi Archive manifest is found. */
+    static final String ARTIFACT_TYPE_NAR = "nar";
+    /** Artifact type tag for each NiFi extension's own child {@link Datum}, see {@link #parseExtension}. */
+    static final String ARTIFACT_TYPE_NIFI_EXTENSION = "nifi-extension";
     private final MavenXpp3Reader pomReader;
     private final JAXBExtensionManifestParser nifiParser;
 
@@ -147,12 +155,15 @@ public class MavenArtifactParser implements ArtifactParser {
             ArtifactFields.SCM_URL.setString(metadata, pomModel.flatMap(MavenArtifactParser::readScmUrl).orElse(null));
         }
 
+        ArtifactFields.ARTIFACT_TYPES.getStringList(metadata).add(ARTIFACT_TYPE_JAR);
+
         try (ZipFile zipFile = new ZipFile(contentPath.toFile())) {
             ZipEntry entry = zipFile.getEntry("META-INF/docs/extension-manifest.xml");
             if (entry != null) {
+                ArtifactFields.ARTIFACT_TYPES.getStringList(metadata).add(ARTIFACT_TYPE_NAR);
                 try (InputStream is = zipFile.getInputStream(entry)) {
                     ExtensionManifest manifest = this.nifiParser.parse(is);
-                    
+
                     for(Extension extension: manifest.getExtensions()) {
                     	parseExtension(context, contentPath, metadata, manifest, extension);
                     }
@@ -184,69 +195,68 @@ public class MavenArtifactParser implements ArtifactParser {
         ArtifactFields.SOURCE_TYPE.setString(extensionMetadata, sourceType);
         final List<String> tags = extension.getTags();
         ArtifactFields.TAGS.getStringList(extensionMetadata).addAll(tags);
-        
-        final StringBuilder readme = new StringBuilder();
-        
+        ArtifactFields.ARTIFACT_TYPES.getStringList(extensionMetadata).add(ARTIFACT_TYPE_NIFI_EXTENSION);
+
         final DynamicRelationship dynamicRelationship = extension.getDynamicRelationship();
-        if(dynamicRelationship != null) {
-        	writeKeyValue(readme, "Dynamic Relationship", "Value");
-        	writeKeyValue(readme, "-------", "-------");
-        	writeKeyValue(readme, dynamicRelationship.getName(), dynamicRelationship.getDescription());
-	        readme.append("\n\n\n\n");
+        if (dynamicRelationship != null) {
+            addRecord(NarExtensionFields.DYNAMIC_RELATIONSHIP, extensionMetadata,
+                    "Dynamic Relationship", dynamicRelationship.getName(),
+                    dynamicRelationship.getDescription());
         }
-        
-        if(extension.getDynamicProperties() != null) {
-        	writeKeyValue(readme, "Dynamic Property", "Value");
-        	writeKeyValue(readme, "-------", "-------");
-            for(DynamicProperty dynamicProperty: extension.getDynamicProperties()) {
-	        	writeKeyValue(readme, dynamicProperty.getName(), dynamicProperty.getDescription());
+
+        if (extension.getDynamicProperties() != null) {
+            for (DynamicProperty dynamicProperty : extension.getDynamicProperties()) {
+                addRecord(NarExtensionFields.DYNAMIC_PROPERTIES, extensionMetadata,
+                        "Dynamic Property", dynamicProperty.getName(), dynamicProperty.getDescription());
             }
-	        readme.append("\n\n\n\n");
         }
-        
-        if(extension.getProperties() != null) {
-        	writeKeyValue(readme, "Property", "Value");
-        	writeKeyValue(readme, "-------", "-------");
-        	for(Property relationship: extension.getProperties()) {
-	        	writeKeyValue(readme, relationship.getName(), relationship.getDescription());
+
+        if (extension.getProperties() != null) {
+            for (Property property : extension.getProperties()) {
+                addRecord(NarExtensionFields.PROPERTIES, extensionMetadata,
+                        "Property", property.getName(), property.getDescription());
             }
-	        readme.append("\n\n\n\n");
         }
-        
-        if(extension.getRelationships() != null) {
-        	writeKeyValue(readme, "Relationship", "Value");
-        	writeKeyValue(readme, "-------", "-------");
-        	for(Relationship relationship: extension.getRelationships()) {
-	        	writeKeyValue(readme, relationship.getName(), relationship.getDescription());
+
+        if (extension.getRelationships() != null) {
+            for (Relationship relationship : extension.getRelationships()) {
+                addRecord(NarExtensionFields.RELATIONSHIPS, extensionMetadata,
+                        "Relationship", relationship.getName(), relationship.getDescription());
             }
-	        readme.append("\n\n\n\n");
         }
-        
-        if(extension.getReadsAttributes() != null) {
-        	writeKeyValue(readme, "Reads Attribute", "Value");
-        	writeKeyValue(readme, "-------", "-------");
-        	for(Attribute attribute: extension.getReadsAttributes()) {
-	        	writeKeyValue(readme, attribute.getName(), attribute.getDescription());
+
+        if (extension.getReadsAttributes() != null) {
+            for (Attribute attribute : extension.getReadsAttributes()) {
+                addRecord(NarExtensionFields.READS_ATTRIBUTES, extensionMetadata,
+                        "Reads Attribute", attribute.getName(), attribute.getDescription());
             }
-	        readme.append("\n\n\n\n");
         }
-             
-        if(extension.getWritesAttributes() != null) {
-        	writeKeyValue(readme, "Writes Attribute", "Value");
-        	writeKeyValue(readme, "-------", "-------");
-	        for(Attribute attribute: extension.getWritesAttributes()) {
-	        	writeKeyValue(readme, attribute.getName(), attribute.getDescription());
-	        }
-	        readme.append("\n\n\n\n");
+
+        if (extension.getWritesAttributes() != null) {
+            for (Attribute attribute : extension.getWritesAttributes()) {
+                addRecord(NarExtensionFields.WRITES_ATTRIBUTES, extensionMetadata,
+                        "Writes Attribute", attribute.getName(), attribute.getDescription());
+            }
         }
-                
-        ArtifactFields.README.setString(extensionMetadata, readme.toString());
-                
+
         context.writeArtifact(extensionMetadata, contentPath);
     }
-    
-    private static void writeKeyValue(StringBuilder builder, String key, String value) {
-    	builder.append("| ").append(key).append(" | ").append(value).append(" |\n");
+
+    /**
+     * Appends one {@code nameColumnLabel -> name, "Value" -> description} row to a table field.
+     * The NiFi extension manifest doesn't guarantee either value is present, so both are
+     * null-safe (an empty cell renders instead of a missing row).
+     */
+    private static void addRecord(NarExtensionFields field, Datum extensionMetadata, String nameColumnLabel,
+            @Nullable String name, @Nullable String description) {
+        Map<String, String> row = new LinkedHashMap<>();
+        row.put(nameColumnLabel, safe(name));
+        row.put("Value", safe(description));
+        field.getRecordList(extensionMetadata).add(row);
+    }
+
+    private static String safe(@Nullable String value) {
+        return value == null ? "" : value;
     }
     
     private Optional<PomCandidate> selectPomCandidate(ZipFile zipFile, @Nullable String jarFileName) throws Exception {

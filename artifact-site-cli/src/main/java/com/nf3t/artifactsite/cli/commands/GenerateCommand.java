@@ -39,6 +39,7 @@ import org.slf4j.LoggerFactory;
 import com.nf3t.artifactsite.api.ArtifactFields;
 import com.nf3t.artifactsite.api.Datum;
 import com.nf3t.artifactsite.api.PathUtils;
+import com.nf3t.artifactsite.api.SectionSpec;
 import com.nf3t.artifactsite.cli.ArtifactSiteGeneratorCli;
 
 import freemarker.template.Configuration;
@@ -147,11 +148,13 @@ public class GenerateCommand implements Runnable {
         writeManifest(outputRoot, homePageTitle);
 
         Map<String, String> parserIconUrls = copyParserIcons(parentCommand.iconsDir(), outputRoot);
-        Map<String, String> parserDisplayNames = readStringMapCache(parentCommand.parserDisplayNamesPath());
+        Map<String, String> typeDisplayNames = readStringMapCache(parentCommand.artifactTypeDisplayNamesPath());
         Map<String, String> parserInstallGuides = readStringMapCache(parentCommand.parserInstallGuidesPath());
         Map<String, List<String>> parserSeoTags = readListMapCache(parentCommand.parserSeoTagsPath());
-        GenerationModel model =
-                buildModel(artifactCatalog, outputRoot, parserIconUrls, parserDisplayNames, parserInstallGuides, parserSeoTags);
+        Map<String, List<SectionSpec>> artifactTypeSections = readSectionsMapCache(parentCommand.artifactTypeSectionsPath());
+        GenerationModel model = buildModel(
+                artifactCatalog, outputRoot, parserIconUrls, typeDisplayNames, parserInstallGuides, parserSeoTags,
+                artifactTypeSections);
         writeSearchIndex(outputRoot.resolve("search-index.json"), model.searchIndexEntries());
 
         Configuration freemarker = createFreemarkerConfiguration();
@@ -159,56 +162,42 @@ public class GenerateCommand implements Runnable {
                 freemarker,
                 "index.ftl",
                 outputRoot.resolve("index.html"),
-                createRootIndexData(model, parserIconUrls, homePageTitle));
+                createRootIndexData(model, typeDisplayNames, homePageTitle));
         writeTemplate(
                 freemarker, "build-info.ftl", outputRoot.resolve("build-info.html"), createBuildInfoData(System.getenv(), generatedAt));
 
-        for (ParserGroup parserGroup : model.parserGroups()) {
-            Path parserIndexPath = outputRoot.resolve("artifacts").resolve(parserGroup.parserSegment()).resolve("index.html");
-            List<String> parserKeywords = parserSeoTags.getOrDefault(parserGroup.parserName(), List.of());
-            Map<String, Object> parserData = new HashMap<>();
-            parserData.put("title", parserGroup.parserDisplayName() + " Artifacts");
-            parserData.put("pageHeading", parserGroup.parserDisplayName() + " Artifacts");
-            parserData.put("pageDescription", "Latest artifacts parsed by " + parserGroup.parserDisplayName());
-            parserData.put("rootPath", relativeRootPath(parserIndexPath, outputRoot));
-            parserData.put("pageIcon", parserIconUrls.getOrDefault(parserGroup.parserName(), defaultIconUrl()));
-            parserData.put("pageKeywords", String.join(", ", combineKeywords(List.of(parserGroup.parserDisplayName()), parserKeywords)));
-            parserData.put("artifactCards", parserGroup.latestArtifacts());
-            writeTemplate(freemarker, "index.ftl", parserIndexPath, parserData);
+        for (ArtifactGroup artifactGroup : model.artifactGroups()) {
+            Path artifactIndexPath = outputRoot
+                    .resolve("artifacts")
+                    .resolve(artifactGroup.groupIdSegment())
+                    .resolve(artifactGroup.artifactIdSegment())
+                    .resolve("index.html");
+            Map<String, Object> artifactData = new HashMap<>();
+            Map<String, Object> latestDetailPage = artifactGroup.detailPages().get(0);
+            String artifactName = (String) latestDetailPage.get("pageHeading");
+            String latestDescription = (String) latestDetailPage.get("description");
+            artifactData.put("title", artifactName + " Versions");
+            artifactData.put("pageHeading", artifactName + " Versions");
+            artifactData.put(
+                    "pageDescription",
+                    isBlank(latestDescription)
+                            ? "All published versions for " + artifactName
+                            : latestDescription);
+            artifactData.put("rootPath", relativeRootPath(artifactIndexPath, outputRoot));
+            artifactData.put("pageIcon", latestDetailPage.get("pageIcon"));
+            artifactData.put("pageKeywords", latestDetailPage.get("pageKeywords"));
+            artifactData.put("versions", artifactGroup.versionRows());
+            writeTemplate(freemarker, "index.ftl", artifactIndexPath, artifactData);
 
-            for (ArtifactGroup artifactGroup : parserGroup.artifactGroups()) {
-                Path artifactIndexPath = outputRoot
+            for (Map<String, Object> detailPage : artifactGroup.detailPages()) {
+                Path detailPath = outputRoot
                         .resolve("artifacts")
-                        .resolve(parserGroup.parserSegment())
-                        .resolve(artifactGroup.artifactSegment())
+                        .resolve(artifactGroup.groupIdSegment())
+                        .resolve(artifactGroup.artifactIdSegment())
+                        .resolve((String) detailPage.get("versionSegment"))
                         .resolve("index.html");
-                Map<String, Object> artifactData = new HashMap<>();
-                Map<String, Object> latestDetailPage = artifactGroup.detailPages().get(0);
-                String artifactName = (String) latestDetailPage.get("pageHeading");
-                String latestDescription = (String) latestDetailPage.get("description");
-                artifactData.put("title", artifactName + " Versions");
-                artifactData.put("pageHeading", artifactName + " Versions");
-                artifactData.put(
-                        "pageDescription",
-                        isBlank(latestDescription)
-                                ? "All published versions for " + artifactName
-                                : latestDescription);
-                artifactData.put("rootPath", relativeRootPath(artifactIndexPath, outputRoot));
-                artifactData.put("pageIcon", latestDetailPage.get("pageIcon"));
-                artifactData.put("pageKeywords", latestDetailPage.get("pageKeywords"));
-                artifactData.put("versions", artifactGroup.versionRows());
-                writeTemplate(freemarker, "index.ftl", artifactIndexPath, artifactData);
-
-                for (Map<String, Object> detailPage : artifactGroup.detailPages()) {
-                    Path detailPath = outputRoot
-                            .resolve("artifacts")
-                            .resolve(parserGroup.parserSegment())
-                            .resolve(artifactGroup.artifactSegment())
-                            .resolve((String) detailPage.get("versionSegment"))
-                            .resolve("index.html");
-                    detailPage.put("rootPath", relativeRootPath(detailPath, outputRoot));
-                    writeTemplate(freemarker, "artifact.ftl", detailPath, detailPage);
-                }
+                detailPage.put("rootPath", relativeRootPath(detailPath, outputRoot));
+                writeTemplate(freemarker, "artifact.ftl", detailPath, detailPage);
             }
         }
 
@@ -227,6 +216,28 @@ public class GenerateCommand implements Runnable {
                     tagArtifactCards.isEmpty() ? "" : tagArtifactCards.get(0).get("icon"));
             tagData.put("artifactCards", tagArtifactCards);
             writeTemplate(freemarker, "tag.ftl", tagPath, tagData);
+        }
+
+        // Artifact types are a cross-cutting classification, not a routing dimension (an artifact
+        // can carry more than one, e.g. a NiFi Archive is both "jar" and "nar") - so this reuses
+        // exactly the tag mechanism above (same data shape, same tag.ftl template) rather than the
+        // old per-parser index pages it replaces.
+        for (Map.Entry<String, List<Map<String, Object>>> typeEntry : model.typeCards().entrySet()) {
+            String type = typeEntry.getKey();
+            List<Map<String, Object>> typeArtifactCards = typeEntry.getValue();
+            String typeLabel = typeDisplayNames.getOrDefault(type, type);
+            Path typePath = outputRoot.resolve("types").resolve(toPathSegment(type)).resolve("index.html");
+            Map<String, Object> typeData = new HashMap<>();
+            typeData.put("title", "Type: " + typeLabel);
+            typeData.put("pageHeading", "Type: " + typeLabel);
+            typeData.put("pageDescription", "Artifacts of type “" + typeLabel + "”");
+            typeData.put("rootPath", relativeRootPath(typePath, outputRoot));
+            typeData.put("pageKeywords", typeLabel);
+            typeData.put(
+                    "pageIcon",
+                    typeArtifactCards.isEmpty() ? "" : typeArtifactCards.get(0).get("icon"));
+            typeData.put("artifactCards", typeArtifactCards);
+            writeTemplate(freemarker, "tag.ftl", typePath, typeData);
         }
 
         // Must run last: the precache list (see collectPrecacheUrls) has to reflect every file
@@ -285,11 +296,12 @@ public class GenerateCommand implements Runnable {
             List<Datum> artifactCatalog,
             Path outputRoot,
             Map<String, String> parserIconUrls,
-            Map<String, String> parserDisplayNames,
+            Map<String, String> typeDisplayNames,
             Map<String, String> parserInstallGuides,
-            Map<String, List<String>> parserSeoTags)
+            Map<String, List<String>> parserSeoTags,
+            Map<String, List<SectionSpec>> artifactTypeSections)
             throws IOException {
-        Map<String, Map<String, List<Datum>>> grouped = new LinkedHashMap<>();
+        Map<String, List<Datum>> grouped = new LinkedHashMap<>();
 
         for (Datum artifact : artifactCatalog) {
             if (isBlank(ArtifactFields.PLUGIN_ID.getString(artifact))
@@ -300,105 +312,108 @@ public class GenerateCommand implements Runnable {
                 continue;
             }
 
-            grouped.computeIfAbsent(ArtifactFields.PLUGIN_ID.getString(artifact), ignored -> new LinkedHashMap<>())
-                    .computeIfAbsent(ArtifactFields.getArtifactSlug(artifact), ignored -> new ArrayList<>())
+            grouped.computeIfAbsent(ArtifactFields.getArtifactSlug(artifact), ignored -> new ArrayList<>())
                     .add(artifact);
         }
 
-        List<ParserGroup> parserGroups = new ArrayList<>();
+        List<ArtifactGroup> artifactGroups = new ArrayList<>();
         List<Map<String, Object>> allLatestArtifactCards = new ArrayList<>();
         List<Map<String, Object>> searchEntries = new ArrayList<>();
         Map<String, List<Map<String, Object>>> tagCards = new LinkedHashMap<>();
+        Map<String, List<Map<String, Object>>> typeCards = new LinkedHashMap<>();
 
-        List<String> parserNames = new ArrayList<>(grouped.keySet());
-        parserNames.sort(String::compareToIgnoreCase);
+        List<String> artifactKeys = new ArrayList<>(grouped.keySet());
+        artifactKeys.sort(String::compareToIgnoreCase);
 
-        for (String parserName : parserNames) {
-            String parserSegment = toPathSegment(parserName);
-            String parserDisplayName = parserDisplayNames.getOrDefault(parserName, parserName);
-            String installGuideTemplate = parserInstallGuides.get(parserName);
-            List<String> parserKeywords = parserSeoTags.getOrDefault(parserName, List.of());
-            List<ArtifactGroup> artifactGroups = new ArrayList<>();
-            List<Map<String, Object>> latestArtifacts = new ArrayList<>();
+        for (String artifactKey : artifactKeys) {
+            List<Datum> versions = new ArrayList<>(grouped.get(artifactKey));
+            versions.sort((a, b) -> compareVersions(
+                    safe(ArtifactFields.VERSION.getString(b)), safe(ArtifactFields.VERSION.getString(a))));
 
-            List<String> artifactKeys = new ArrayList<>(grouped.get(parserName).keySet());
-            artifactKeys.sort(String::compareToIgnoreCase);
+            Datum latest = versions.get(0);
+            String groupIdSegment = toPathSegment(safe(ArtifactFields.GROUP_ID.getString(latest)));
+            String artifactIdSegment = toPathSegment(safe(ArtifactFields.ARTIFACT_ID.getString(latest)));
+            String latestVersionSegment = toPathSegment(safe(ArtifactFields.VERSION.getString(latest)));
+            String detailUrl = toArtifactDetailUrl(groupIdSegment, artifactIdSegment, latestVersionSegment);
 
-            for (String artifactKey : artifactKeys) {
-                String artifactSegment = toPathSegment(artifactKey);
-                List<Datum> versions = new ArrayList<>(grouped.get(parserName).get(artifactKey));
-                versions.sort((a, b) -> compareVersions(
-                        safe(ArtifactFields.VERSION.getString(b)), safe(ArtifactFields.VERSION.getString(a))));
+            String latestParserIconUrl = parserIconUrls.getOrDefault(
+                    safe(ArtifactFields.PLUGIN_ID.getString(latest)), defaultIconUrl());
+            String latestIconUrl = resolveArtifactIconUrl(
+                    latest, latestParserIconUrl, outputRoot, groupIdSegment, artifactIdSegment, latestVersionSegment);
+            String latestTypeLabel = typeLabel(canonicalArtifactType(latest), typeDisplayNames);
+            Map<String, Object> latestCard = createArtifactCard(latest, latestTypeLabel, detailUrl, latestIconUrl);
+            allLatestArtifactCards.add(latestCard);
+            searchEntries.add(createSearchEntry(latestCard));
 
-                Datum latest = versions.get(0);
-                String latestVersionSegment = toPathSegment(safe(ArtifactFields.VERSION.getString(latest)));
-                String detailUrl = toArtifactDetailUrl(parserSegment, artifactSegment, latestVersionSegment);
-
-                String parserIconUrl = parserIconUrls.getOrDefault(parserName, defaultIconUrl());
-                String latestIconUrl = resolveArtifactIconUrl(
-                        latest, parserIconUrl, outputRoot, parserSegment, artifactSegment, latestVersionSegment);
-                Map<String, Object> latestCard = createArtifactCard(latest, parserDisplayName, detailUrl, latestIconUrl);
-                latestArtifacts.add(latestCard);
-                allLatestArtifactCards.add(latestCard);
-                searchEntries.add(createSearchEntry(latestCard));
-
-                for (String tag : normalizeTags(ArtifactFields.TAGS.getStringList(latest))) {
-                    tagCards.computeIfAbsent(tag, ignored -> new ArrayList<>()).add(latestCard);
-                }
-
-                List<Map<String, Object>> versionRows = new ArrayList<>();
-                List<Map<String, Object>> detailPages = new ArrayList<>();
-                for (Datum version : versions) {
-                    String versionValue = safe(ArtifactFields.VERSION.getString(version));
-                    String versionSegment = toPathSegment(versionValue);
-                    String versionUrl = toArtifactDetailUrl(parserSegment, artifactSegment, versionSegment);
-                    String downloadUrl = resolveDownloadUrl(version, outputRoot);
-                    String versionIconUrl = resolveArtifactIconUrl(
-                            version, parserIconUrl, outputRoot, parserSegment, artifactSegment, versionSegment);
-
-                    Map<String, Object> versionRow = new HashMap<>();
-                    versionRow.put("version", versionValue);
-                    versionRow.put("description", safe(ArtifactFields.DESCRIPTION.getString(version)));
-                    versionRow.put("downloadUrl", downloadUrl);
-                    versionRow.put("detailUrl", versionUrl);
-                    versionRows.add(versionRow);
-
-                    Map<String, Object> detailPage = new HashMap<>();
-                    detailPage.put("title", displayName(version) + " " + versionValue);
-                    detailPage.put("pageHeading", displayName(version));
-                    detailPage.put("artifactKey", artifactKey);
-                    detailPage.put("version", versionValue);
-                    detailPage.put("versionSegment", versionSegment);
-                    detailPage.put("parserType", parserDisplayName);
-                    detailPage.put("groupId", safe(ArtifactFields.GROUP_ID.getString(version)));
-                    detailPage.put("artifactId", safe(ArtifactFields.ARTIFACT_ID.getString(version)));
-                    detailPage.put("description", safe(ArtifactFields.DESCRIPTION.getString(version)));
-                    detailPage.put("license", safe(ArtifactFields.LICENSE.getString(version)));
-                    detailPage.put("sourceType", safe(ArtifactFields.SOURCE_TYPE.getString(version)));
-                    detailPage.put("sourceValue", safe(ArtifactFields.SOURCE_VALUE.getString(version)));
-                    detailPage.put("scmUrl", safe(ArtifactFields.SCM_URL.getString(version)));
-                    detailPage.put("fileName", safe(ArtifactFields.FILE_NAME.getString(version)));
-                    detailPage.put("sha256", safe(ArtifactFields.FILE_SHA256.getString(version)));
-                    detailPage.put("fileSizeBytes", ArtifactFields.FILE_SIZE.getLong(version));
-                    detailPage.put("fileSizeHumanReadable", formatFileSize(ArtifactFields.FILE_SIZE.getLong(version)));
-                    detailPage.put("downloadUrl", downloadUrl);
-                    detailPage.put("pageIcon", versionIconUrl);
-                    detailPage.put("readmeHtml", renderMarkdown(ArtifactFields.README.getString(version)));
-                    detailPage.put("installGuideHtml", renderInstallGuide(installGuideTemplate, version));
-                    detailPage.put("tags", normalizeTags(ArtifactFields.TAGS.getStringList(version)));
-                    detailPage.put("authors", normalizeTags(ArtifactFields.AUTHORS.getStringList(version)));
-                    detailPage.put(
-                            "pageKeywords",
-                            String.join(
-                                    ", ",
-                                    combineKeywords(ArtifactFields.TAGS.getStringList(version), parserKeywords)));
-                    detailPages.add(detailPage);
-                }
-
-                artifactGroups.add(new ArtifactGroup(artifactKey, artifactSegment, versionRows, detailPages));
+            for (String tag : normalizeTags(ArtifactFields.TAGS.getStringList(latest))) {
+                tagCards.computeIfAbsent(tag, ignored -> new ArrayList<>()).add(latestCard);
+            }
+            // Browsing-by-type is inclusive (like tags): an artifact with several types (e.g. a
+            // NiFi Archive is both "jar" and "nar") appears on every one of its type pages, even
+            // though only one of them wins as its own card/badge label above.
+            for (String type : effectiveArtifactTypes(latest)) {
+                typeCards.computeIfAbsent(type, ignored -> new ArrayList<>()).add(latestCard);
             }
 
-            parserGroups.add(new ParserGroup(parserName, parserDisplayName, parserSegment, latestArtifacts, artifactGroups));
+            List<Map<String, Object>> versionRows = new ArrayList<>();
+            List<Map<String, Object>> detailPages = new ArrayList<>();
+            for (Datum version : versions) {
+                String versionValue = safe(ArtifactFields.VERSION.getString(version));
+                String versionSegment = toPathSegment(versionValue);
+                String versionUrl = toArtifactDetailUrl(groupIdSegment, artifactIdSegment, versionSegment);
+                String downloadUrl = resolveDownloadUrl(version, outputRoot);
+                String versionPluginId = safe(ArtifactFields.PLUGIN_ID.getString(version));
+                String versionParserIconUrl = parserIconUrls.getOrDefault(versionPluginId, defaultIconUrl());
+                String versionIconUrl = resolveArtifactIconUrl(
+                        version, versionParserIconUrl, outputRoot, groupIdSegment, artifactIdSegment, versionSegment);
+                String installGuideTemplate = parserInstallGuides.get(versionPluginId);
+                List<String> versionParserKeywords = parserSeoTags.getOrDefault(versionPluginId, List.of());
+                List<String> versionTypeLabels = effectiveArtifactTypes(version).stream()
+                        .map(type -> typeLabel(type, typeDisplayNames))
+                        .toList();
+
+                Map<String, Object> versionRow = new HashMap<>();
+                versionRow.put("version", versionValue);
+                versionRow.put("description", safe(ArtifactFields.DESCRIPTION.getString(version)));
+                versionRow.put("downloadUrl", downloadUrl);
+                versionRow.put("detailUrl", versionUrl);
+                versionRows.add(versionRow);
+
+                List<String> versionTagsAndTypes = new ArrayList<>(ArtifactFields.TAGS.getStringList(version));
+                versionTagsAndTypes.addAll(versionTypeLabels);
+
+                Map<String, Object> detailPage = new HashMap<>();
+                detailPage.put("title", displayName(version) + " " + versionValue);
+                detailPage.put("pageHeading", displayName(version));
+                detailPage.put("artifactKey", artifactKey);
+                detailPage.put("version", versionValue);
+                detailPage.put("versionSegment", versionSegment);
+                detailPage.put("artifactType", typeLabel(canonicalArtifactType(version), typeDisplayNames));
+                detailPage.put("groupId", safe(ArtifactFields.GROUP_ID.getString(version)));
+                detailPage.put("artifactId", safe(ArtifactFields.ARTIFACT_ID.getString(version)));
+                detailPage.put("description", safe(ArtifactFields.DESCRIPTION.getString(version)));
+                detailPage.put("license", safe(ArtifactFields.LICENSE.getString(version)));
+                detailPage.put("sourceType", safe(ArtifactFields.SOURCE_TYPE.getString(version)));
+                detailPage.put("sourceValue", safe(ArtifactFields.SOURCE_VALUE.getString(version)));
+                detailPage.put("scmUrl", safe(ArtifactFields.SCM_URL.getString(version)));
+                detailPage.put("fileName", safe(ArtifactFields.FILE_NAME.getString(version)));
+                detailPage.put("sha256", safe(ArtifactFields.FILE_SHA256.getString(version)));
+                detailPage.put("fileSizeBytes", ArtifactFields.FILE_SIZE.getLong(version));
+                detailPage.put("fileSizeHumanReadable", formatFileSize(ArtifactFields.FILE_SIZE.getLong(version)));
+                detailPage.put("downloadUrl", downloadUrl);
+                detailPage.put("pageIcon", versionIconUrl);
+                detailPage.put("readmeHtml", renderMarkdown(ArtifactFields.README.getString(version)));
+                detailPage.put("installGuideHtml", renderInstallGuide(installGuideTemplate, version));
+                detailPage.put("tags", normalizeTags(ArtifactFields.TAGS.getStringList(version)));
+                detailPage.put("authors", normalizeTags(ArtifactFields.AUTHORS.getStringList(version)));
+                detailPage.put(
+                        "pageKeywords",
+                        String.join(", ", combineKeywords(versionTagsAndTypes, versionParserKeywords)));
+                detailPage.put("sections", buildSections(version, artifactTypeSections));
+                detailPages.add(detailPage);
+            }
+
+            artifactGroups.add(new ArtifactGroup(artifactKey, groupIdSegment, artifactIdSegment, versionRows, detailPages));
         }
 
         allLatestArtifactCards.sort(
@@ -407,31 +422,72 @@ public class GenerateCommand implements Runnable {
         for (Map.Entry<String, List<Map<String, Object>>> entry : tagCards.entrySet()) {
             entry.getValue().sort(Comparator.comparing(card -> (String) card.get("name"), String::compareToIgnoreCase));
         }
+        for (Map.Entry<String, List<Map<String, Object>>> entry : typeCards.entrySet()) {
+            entry.getValue().sort(Comparator.comparing(card -> (String) card.get("name"), String::compareToIgnoreCase));
+        }
 
-        return new GenerationModel(parserGroups, allLatestArtifactCards, searchEntries, tagCards);
+        return new GenerationModel(artifactGroups, allLatestArtifactCards, searchEntries, tagCards, typeCards);
+    }
+
+    /**
+     * An artifact's own {@link ArtifactFields#ARTIFACT_TYPES}, falling back to its {@link
+     * ArtifactFields#PLUGIN_ID} as a pseudo-type when it declares none at all - so an artifact
+     * produced by a parser that hasn't adopted {@code ARTIFACT_TYPES} yet (or a hand-built record
+     * predating it) still gets a sensible type-browsing entry instead of vanishing from it.
+     *
+     * @param artifact artifact whose types are being resolved
+     * @return one or more artifact type keys, never empty
+     */
+    private static List<String> effectiveArtifactTypes(Datum artifact) {
+        List<String> types = ArtifactFields.ARTIFACT_TYPES.getStringList(artifact);
+        return types.isEmpty() ? List.of(safe(ArtifactFields.PLUGIN_ID.getString(artifact))) : types;
+    }
+
+    /**
+     * The single type shown as an artifact's own card/detail-page label - unlike type-browsing
+     * (see {@link #effectiveArtifactTypes(Datum)}), which is inclusive of every type an artifact
+     * carries, a compact one-line badge needs exactly one winner. The last entry in {@link
+     * ArtifactFields#ARTIFACT_TYPES} wins, since parsers append from generic to specific (e.g. a
+     * NiFi Archive gets {@code "jar"} unconditionally, then {@code "nar"} only once its manifest is
+     * found, so the more specific, more informative type is listed last).
+     *
+     * @param artifact artifact whose canonical display type is being resolved
+     * @return the winning artifact type key
+     */
+    private static String canonicalArtifactType(Datum artifact) {
+        List<String> types = effectiveArtifactTypes(artifact);
+        return types.get(types.size() - 1);
+    }
+
+    private static String typeLabel(String type, Map<String, String> typeDisplayNames) {
+        return typeDisplayNames.getOrDefault(type, type);
     }
 
     private Map<String, Object> createRootIndexData(
-            GenerationModel model, Map<String, String> parserIconUrls, String homePageTitle) {
-        List<Map<String, Object>> parserSummaries = new ArrayList<>();
-        List<String> parserDisplayNames = new ArrayList<>();
-        for (ParserGroup parserGroup : model.parserGroups()) {
-            Map<String, Object> parserSummary = new HashMap<>();
-            parserSummary.put("parserName", parserGroup.parserDisplayName());
-            parserSummary.put("artifactCount", parserGroup.latestArtifacts().size());
-            parserSummary.put("url", "/artifacts/" + parserGroup.parserSegment() + "/index.html");
-            parserSummary.put("icon", parserIconUrls.getOrDefault(parserGroup.parserName(), defaultIconUrl()));
-            parserSummaries.add(parserSummary);
-            parserDisplayNames.add(parserGroup.parserDisplayName());
+            GenerationModel model, Map<String, String> typeDisplayNames, String homePageTitle) {
+        List<Map<String, Object>> typeSummaries = new ArrayList<>();
+        List<String> typeLabels = new ArrayList<>();
+        List<String> typeKeys = new ArrayList<>(model.typeCards().keySet());
+        typeKeys.sort(String::compareToIgnoreCase);
+        for (String type : typeKeys) {
+            List<Map<String, Object>> cardsForType = model.typeCards().get(type);
+            String label = typeLabel(type, typeDisplayNames);
+            Map<String, Object> typeSummary = new HashMap<>();
+            typeSummary.put("typeName", label);
+            typeSummary.put("artifactCount", cardsForType.size());
+            typeSummary.put("url", "/types/" + toPathSegment(type) + "/index.html");
+            typeSummary.put("icon", cardsForType.isEmpty() ? defaultIconUrl() : cardsForType.get(0).get("icon"));
+            typeSummaries.add(typeSummary);
+            typeLabels.add(label);
         }
 
         Map<String, Object> modelData = new HashMap<>();
         modelData.put("title", homePageTitle);
         modelData.put("pageHeading", homePageTitle);
-        modelData.put("pageDescription", "Browse generated artifacts by parser, tag, and version");
+        modelData.put("pageDescription", "Browse generated artifacts by type, tag, and version");
         modelData.put("rootPath", "");
-        modelData.put("pageKeywords", String.join(", ", combineKeywords(parserDisplayNames, List.of())));
-        modelData.put("parserSummaries", parserSummaries);
+        modelData.put("pageKeywords", String.join(", ", combineKeywords(typeLabels, List.of())));
+        modelData.put("typeSummaries", typeSummaries);
         modelData.put("artifactCards", model.allLatestArtifactCards());
         return modelData;
     }
@@ -631,13 +687,13 @@ public class GenerateCommand implements Runnable {
     }
 
     /**
-     * Reads a parser id -> string JSON cache file (see {@code ParserDisplayNameCache} and
-     * {@code ParserInstallGuideCache}), populated by {@code parse}. Falls back to an empty map
-     * when the cache is missing or unreadable, so callers should fall back sensibly per entry
-     * (e.g. the raw parser id, or omitting the feature entirely).
+     * Reads a string-keyed JSON cache file (e.g. {@code ArtifactTypeDisplayNameCache} keyed by
+     * artifact type, or {@code ParserInstallGuideCache} keyed by parser id), populated by {@code
+     * parse}. Falls back to an empty map when the cache is missing or unreadable, so callers
+     * should fall back sensibly per entry (e.g. the raw key, or omitting the feature entirely).
      *
-     * @param cachePath parser id -> string cache file populated by {@code parse}
-     * @return cached value by parser id
+     * @param cachePath string-keyed cache file populated by {@code parse}
+     * @return cached value by key
      */
     private Map<String, String> readStringMapCache(Path cachePath) {
         if (!Files.isRegularFile(cachePath)) {
@@ -677,6 +733,29 @@ public class GenerateCommand implements Runnable {
     }
 
     /**
+     * Reads the artifact type -> declared sections JSON cache file (see
+     * {@code ArtifactTypeSectionsCache}), populated by {@code parse}. Falls back to an empty map
+     * when the cache is missing or unreadable, so callers should fall back to no declared sections.
+     *
+     * @param cachePath artifact type -> declared sections cache file populated by {@code parse}
+     * @return cached sections by artifact type
+     */
+    private Map<String, List<SectionSpec>> readSectionsMapCache(Path cachePath) {
+        if (!Files.isRegularFile(cachePath)) {
+            return Map.of();
+        }
+        try (InputStream input = Files.newInputStream(cachePath)) {
+            Map<String, List<SectionSpec>> values =
+                    OBJECT_MAPPER.readValue(input, new TypeReference<Map<String, List<SectionSpec>>>() {
+                    });
+            return values == null ? Map.of() : values;
+        } catch (IOException e) {
+            LOGGER.warn("Failed to read artifact type sections cache at " + cachePath, e);
+            return Map.of();
+        }
+    }
+
+    /**
      * Writes the site's PWA web manifest, naming it after the effective home page title and
      * pointing its icon at the effective favicon (see {@link #copyFavicon(Path)}), so both stay in
      * sync with {@code --title}/{@code --favicon}.
@@ -694,7 +773,7 @@ public class GenerateCommand implements Runnable {
         Map<String, Object> manifest = new LinkedHashMap<>();
         manifest.put("name", homePageTitle);
         manifest.put("short_name", homePageTitle);
-        manifest.put("description", "Browse generated artifacts by parser, tag, and version");
+        manifest.put("description", "Browse generated artifacts by type, tag, and version");
         manifest.put("start_url", ".");
         manifest.put("scope", ".");
         manifest.put("display", "standalone");
@@ -777,10 +856,10 @@ public class GenerateCommand implements Runnable {
      * produced it discovered one, or the owning parser's default icon otherwise.
      *
      * @param artifact artifact version whose icon is being resolved
-     * @param parserIconUrl fallback icon URL for the artifact's parser
+     * @param parserIconUrl fallback icon URL for the artifact's own parser
      * @param outputRoot generated site output root
-     * @param parserSegment path segment for the artifact's parser
-     * @param artifactSegment path segment for the artifact
+     * @param groupIdSegment path segment for the artifact's group id
+     * @param artifactIdSegment path segment for the artifact's artifact id
      * @param versionSegment path segment for this specific version
      * @return site-relative icon URL
      */
@@ -788,8 +867,8 @@ public class GenerateCommand implements Runnable {
             Datum artifact,
             String parserIconUrl,
             Path outputRoot,
-            String parserSegment,
-            String artifactSegment,
+            String groupIdSegment,
+            String artifactIdSegment,
             String versionSegment) {
         String iconData = ArtifactFields.ICON_DATA.getString(artifact);
         if (isBlank(iconData)) {
@@ -802,14 +881,14 @@ public class GenerateCommand implements Runnable {
             String fileName = versionSegment + "." + (isBlank(extension) ? "png" : extension);
             Path destination = outputRoot
                     .resolve("assets/icons/artifacts")
-                    .resolve(parserSegment)
-                    .resolve(artifactSegment)
+                    .resolve(groupIdSegment)
+                    .resolve(artifactIdSegment)
                     .resolve(fileName);
             Files.createDirectories(Objects.requireNonNull(destination.getParent()));
             Files.write(destination, iconBytes);
             return "/assets/icons/artifacts/"
-                    + encodePathSegment(parserSegment) + "/"
-                    + encodePathSegment(artifactSegment) + "/"
+                    + encodePathSegment(groupIdSegment) + "/"
+                    + encodePathSegment(artifactIdSegment) + "/"
                     + encodePathSegment(fileName);
         } catch (IOException | IllegalArgumentException e) {
             LOGGER.warn("Could not write custom icon for artifact " + ArtifactFields.ID.getString(artifact), e);
@@ -873,14 +952,14 @@ public class GenerateCommand implements Runnable {
     }
 
     private static Map<String, Object> createArtifactCard(
-            Datum artifact, String parserName, String detailUrl, String iconUrl) {
+            Datum artifact, String artifactTypeLabel, String detailUrl, String iconUrl) {
         Map<String, Object> card = new HashMap<>();
         card.put("name", displayName(artifact));
         card.put("version", safe(ArtifactFields.VERSION.getString(artifact)));
         card.put("description", safe(ArtifactFields.DESCRIPTION.getString(artifact)));
         card.put("tags", normalizeTags(ArtifactFields.TAGS.getStringList(artifact)));
         card.put("url", detailUrl);
-        card.put("parserType", parserName);
+        card.put("artifactType", artifactTypeLabel);
         card.put("groupId", safe(ArtifactFields.GROUP_ID.getString(artifact)));
         card.put("artifactId", safe(ArtifactFields.ARTIFACT_ID.getString(artifact)));
         card.put("icon", iconUrl);
@@ -894,7 +973,7 @@ public class GenerateCommand implements Runnable {
         entry.put("description", card.get("description"));
         entry.put("tags", card.get("tags"));
         entry.put("url", card.get("url"));
-        entry.put("parserType", card.get("parserType"));
+        entry.put("artifactType", card.get("artifactType"));
         entry.put("groupId", card.get("groupId"));
         entry.put("artifactId", card.get("artifactId"));
         entry.put("icon", card.get("icon"));
@@ -914,12 +993,13 @@ public class GenerateCommand implements Runnable {
     }
 
     /**
-     * Combines an artifact's own tags with its parser's declared SEO keywords (see
-     * {@code ArtifactParser#seoTags()}) for a page's {@code <meta name="keywords">}, deduplicated
-     * and trimmed, artifact tags first.
+     * Combines a first list of keywords (e.g. an artifact's own tags, optionally already merged
+     * with its artifact type display names - see {@code buildModel}) with a second (typically its
+     * parser's declared SEO keywords, see {@code ArtifactParser#seoTags()}) for a page's {@code
+     * <meta name="keywords">}, deduplicated and trimmed, the first list's entries first.
      *
-     * @param artifactTags the artifact's own tags, or {@code null}
-     * @param parserKeywords the owning parser's declared SEO keywords, or {@code null}
+     * @param artifactTags the first keyword list, or {@code null}
+     * @param parserKeywords the second keyword list, or {@code null}
      * @return combined, deduplicated keyword list
      */
     private static List<String> combineKeywords(@Nullable List<String> artifactTags, @Nullable List<String> parserKeywords) {
@@ -933,8 +1013,8 @@ public class GenerateCommand implements Runnable {
         return normalizeTags(combined);
     }
 
-    private static String toArtifactDetailUrl(String parserSegment, String artifactSegment, String versionSegment) {
-        return "/artifacts/" + parserSegment + "/" + artifactSegment + "/" + versionSegment + "/index.html";
+    private static String toArtifactDetailUrl(String groupIdSegment, String artifactIdSegment, String versionSegment) {
+        return "/artifacts/" + groupIdSegment + "/" + artifactIdSegment + "/" + versionSegment + "/index.html";
     }
 
     private static int compareVersions(String left, String right) {
@@ -997,6 +1077,75 @@ public class GenerateCommand implements Runnable {
             return "";
         }
         return MARKDOWN_RENDERER.render(MARKDOWN_PARSER.parse(markdown));
+    }
+
+    /**
+     * Builds the artifact detail page's main-content sections, declared per artifact type by
+     * {@code ArtifactSectionProvider} (see {@link ArtifactFields#ARTIFACT_TYPES}) and cached by
+     * {@code parse} into the map passed here. An artifact carrying more than one type (e.g. a NiFi
+     * Archive is both {@code "jar"} and {@code "nar"}) gets one block of sections per type, in the
+     * order the types are listed on the artifact, each type's own sections in declared order.
+     *
+     * <p>A section renders nothing (and is omitted) when its backing field is blank/empty, so an
+     * artifact type with no matching content on a particular artifact doesn't produce an empty
+     * heading. When no section produces any content, {@code artifact.ftl} falls back to rendering
+     * {@code readmeHtml} directly, matching this feature's pre-existing behavior.
+     *
+     * @param artifact artifact version whose sections are being built
+     * @param artifactTypeSections artifact type -> declared sections, from {@code parse}'s cache
+     * @return rendered section view models, in render order; empty when none apply or produce content
+     */
+    private static List<Map<String, Object>> buildSections(
+            Datum artifact, Map<String, List<SectionSpec>> artifactTypeSections) {
+        List<Map<String, Object>> sections = new ArrayList<>();
+        for (String artifactType : ArtifactFields.ARTIFACT_TYPES.getStringList(artifact)) {
+            for (SectionSpec spec : artifactTypeSections.getOrDefault(artifactType, List.of())) {
+                Map<String, Object> section = buildSection(artifact, spec);
+                if (section != null) {
+                    sections.add(section);
+                }
+            }
+        }
+        return sections;
+    }
+
+    /**
+     * Renders one declared section, or returns {@code null} when its backing field has no content
+     * to show.
+     */
+    private static @Nullable Map<String, Object> buildSection(Datum artifact, SectionSpec spec) {
+        switch (spec.element()) {
+            case MARKDOWN -> {
+                String html = renderMarkdown(artifact.getString(spec.namespace(), spec.key()));
+                if (isBlank(html)) {
+                    return null;
+                }
+                Map<String, Object> section = new HashMap<>();
+                section.put("title", spec.title());
+                section.put("type", "markdown");
+                section.put("html", html);
+                return section;
+            }
+            case TABLE -> {
+                List<Map<String, String>> rows = artifact.getRecordList(spec.namespace(), spec.key());
+                if (rows.isEmpty()) {
+                    return null;
+                }
+                LinkedHashSet<String> columns = new LinkedHashSet<>();
+                for (Map<String, String> row : rows) {
+                    columns.addAll(row.keySet());
+                }
+                Map<String, Object> section = new HashMap<>();
+                section.put("title", spec.title());
+                section.put("type", "table");
+                section.put("columns", new ArrayList<>(columns));
+                section.put("rows", rows);
+                return section;
+            }
+            default -> {
+                return null;
+            }
+        }
     }
 
     /**
@@ -1063,25 +1212,19 @@ public class GenerateCommand implements Runnable {
         return value == null ? "" : value;
     }
 
-    private record ParserGroup(
-            String parserName,
-            String parserDisplayName,
-            String parserSegment,
-            List<Map<String, Object>> latestArtifacts,
-            List<ArtifactGroup> artifactGroups) {
-    }
-
     private record ArtifactGroup(
             String artifactKey,
-            String artifactSegment,
+            String groupIdSegment,
+            String artifactIdSegment,
             List<Map<String, Object>> versionRows,
             List<Map<String, Object>> detailPages) {
     }
 
     private record GenerationModel(
-            List<ParserGroup> parserGroups,
+            List<ArtifactGroup> artifactGroups,
             List<Map<String, Object>> allLatestArtifactCards,
             List<Map<String, Object>> searchIndexEntries,
-            Map<String, List<Map<String, Object>>> tagCards) {
+            Map<String, List<Map<String, Object>>> tagCards,
+            Map<String, List<Map<String, Object>>> typeCards) {
     }
 }

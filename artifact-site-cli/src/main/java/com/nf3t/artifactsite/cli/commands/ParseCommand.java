@@ -8,10 +8,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.nf3t.artifactsite.api.ArtifactParserPlugin;
+import com.nf3t.artifactsite.api.ArtifactSectionProvider;
 import com.nf3t.artifactsite.cli.ArtifactParseContext;
 import com.nf3t.artifactsite.cli.ArtifactSiteGeneratorCli;
+import com.nf3t.artifactsite.cli.ArtifactTypeDisplayNameCache;
+import com.nf3t.artifactsite.cli.ArtifactTypeSectionsCache;
 import com.nf3t.artifactsite.cli.ArtifactsByParser;
-import com.nf3t.artifactsite.cli.ParserDisplayNameCache;
 import com.nf3t.artifactsite.cli.ParserIconCache;
 import com.nf3t.artifactsite.cli.ParserInstallGuideCache;
 import com.nf3t.artifactsite.cli.ParserSeoTagsCache;
@@ -65,9 +67,11 @@ public class ParseCommand implements Runnable {
         List<ArtifactParserPlugin> plugins = parentCommand.loadParserPlugins(pluginManager);
         LOGGER.info("Loaded {} parser plugin(s).", plugins.size());
         ParserIconCache.refresh(plugins, parentCommand.iconsDir(), LOGGER);
-        ParserDisplayNameCache.refresh(plugins, parentCommand.parserDisplayNamesPath(), LOGGER);
         ParserInstallGuideCache.refresh(plugins, parentCommand.parserInstallGuidesPath(), LOGGER);
         ParserSeoTagsCache.refresh(plugins, parentCommand.parserSeoTagsPath(), LOGGER);
+        List<ArtifactSectionProvider> sectionProviders = parentCommand.loadSectionProviders(pluginManager);
+        ArtifactTypeSectionsCache.refresh(sectionProviders, parentCommand.artifactTypeSectionsPath(), LOGGER);
+        ArtifactTypeDisplayNameCache.refresh(sectionProviders, parentCommand.artifactTypeDisplayNamesPath(), LOGGER);
 
         ArtifactsByParser artifacts = parentCommand.loadArtifacts();
         RemoteRequestConfigStore remoteRequestConfigStore = parentCommand.loadRemoteRequestConfigStore();

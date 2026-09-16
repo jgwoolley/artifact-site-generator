@@ -38,7 +38,7 @@
           entry.name,
           entry.description,
           entry.version,
-          entry.parserType,
+          entry.artifactType,
           entry.groupId,
           entry.artifactId,
           tags,
@@ -119,7 +119,7 @@
       meta.textContent = [
         entry.groupId && entry.artifactId ? `${entry.groupId}.${entry.artifactId}` : null,
         entry.version,
-        entry.parserType,
+        entry.artifactType,
       ]
         .filter(Boolean)
         .join(' • ');

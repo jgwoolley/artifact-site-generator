@@ -15,6 +15,14 @@ public interface Datum {
 	public List<String> getStringList(String namespace, String key);
 	/** @return the stored map, creating and storing an empty one first if none exists yet */
 	public Map<String, String> getStringMap(String namespace, String key);
+	/**
+	 * A list of multi-column records (e.g. a table row per NiFi property, each with a "Property"
+	 * and "Description" column), used by table-shaped detail page sections. Each record is a flat
+	 * {@code column name -> value} map.
+	 *
+	 * @return the stored record list, creating and storing an empty one first if none exists yet
+	 */
+	public List<Map<String, String>> getRecordList(String namespace, String key);
 
 	public Long setLong(String namespace, String key, Long value);
 	public Long getLong(String namespace, String key);

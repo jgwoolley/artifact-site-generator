@@ -22,6 +22,7 @@ import org.slf4j.LoggerFactory;
 
 import com.nf3t.artifactsite.api.ArtifactParser;
 import com.nf3t.artifactsite.api.ArtifactParserPlugin;
+import com.nf3t.artifactsite.api.ArtifactSectionProvider;
 import com.nf3t.artifactsite.api.Datum;
 import com.nf3t.artifactsite.api.MapDatum;
 import com.nf3t.artifactsite.cli.commands.AddPluginCommand;
@@ -115,12 +116,12 @@ public class ArtifactSiteGeneratorCli implements Runnable {
     }
 
     /**
-     * Returns the path of the cached JSON map of parser plugin id to UI display name.
+     * Returns the path of the cached JSON map of artifact type to UI display name.
      *
-     * @return parser display name cache file path
+     * @return artifact type display name cache file path
      */
-    public Path parserDisplayNamesPath() {
-        return XdgPaths.parserDisplayNamesPath();
+    public Path artifactTypeDisplayNamesPath() {
+        return XdgPaths.artifactTypeDisplayNamesPath();
     }
 
     /**
@@ -139,6 +140,15 @@ public class ArtifactSiteGeneratorCli implements Runnable {
      */
     public Path parserSeoTagsPath() {
         return XdgPaths.parserSeoTagsPath();
+    }
+
+    /**
+     * Returns the path of the cached JSON map of artifact type to declared detail page sections.
+     *
+     * @return artifact type sections cache file path
+     */
+    public Path artifactTypeSectionsPath() {
+        return XdgPaths.artifactTypeSectionsPath();
     }
 
     public ArtifactsByParser loadArtifacts() {
@@ -230,6 +240,18 @@ public class ArtifactSiteGeneratorCli implements Runnable {
         }
 
         return parsers.stream().map(ParserOnlyPluginAdapter::new).map(ArtifactParserPlugin.class::cast).toList();
+    }
+
+    /**
+     * Loads every {@link ArtifactSectionProvider} extension across all loaded plugins. Unlike
+     * {@link #loadParserPlugins(PluginManager)}, this extension point is independent of {@link
+     * ArtifactParserPlugin}/{@link ArtifactParser}, so no legacy fallback adapter is needed.
+     *
+     * @param pluginManager loaded plugin manager
+     * @return declared section providers
+     */
+    public List<ArtifactSectionProvider> loadSectionProviders(PluginManager pluginManager) {
+        return pluginManager.getExtensions(ArtifactSectionProvider.class);
     }
 
     private static final class ParserOnlyPluginAdapter implements ArtifactParserPlugin {

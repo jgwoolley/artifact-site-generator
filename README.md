@@ -128,9 +128,10 @@ the home page and header.
 - Remote download cache: `${XDG_DATA_HOME:-~/.local/share}/artifact-site-generator/remote-cache`
 - Remote request config: `${XDG_DATA_HOME:-~/.local/share}/artifact-site-generator/remote-requests.json`
 - Parser icon cache: `${XDG_DATA_HOME:-~/.local/share}/artifact-site-generator/icons`
-- Parser display name cache: `${XDG_DATA_HOME:-~/.local/share}/artifact-site-generator/parser-display-names.json`
 - Parser install guide cache: `${XDG_DATA_HOME:-~/.local/share}/artifact-site-generator/parser-install-guides.json`
 - Parser SEO tags cache: `${XDG_DATA_HOME:-~/.local/share}/artifact-site-generator/parser-seo-tags.json`
+- Artifact type sections cache: `${XDG_DATA_HOME:-~/.local/share}/artifact-site-generator/artifact-type-sections.json`
+- Artifact type display name cache: `${XDG_DATA_HOME:-~/.local/share}/artifact-site-generator/artifact-type-display-names.json`
 - Generated static site: `./public` by default (override with `--output`)
 
 ## Data model
@@ -147,6 +148,8 @@ constants (e.g. `ArtifactFields.GROUP_ID.getString(datum)`) rather than getters/
 - `SOURCE_TYPE` (`local` or `remote`), `SOURCE_VALUE` (local path or URL)
 - `DOWNLOAD_URL`, `FILE_NAME`, `FILE_SIZE`, `FILE_SHA256`
 - `PLUGIN_ID` (which parser produced/last touched this record)
+- `ARTIFACT_TYPES` (list of artifact type tags, e.g. `"jar"`/`"nar"` - independent of `PLUGIN_ID`, drives
+  which [detail page sections](#detail-page-sections) render for this artifact)
 - `README` (raw README markdown discovered inside the artifact, if any - see below)
 - `ICON_DATA`, `ICON_ORIGINAL_FILE_NAME` (per-artifact icon override, if any - see
   [Parser icons](#parser-icons))
@@ -158,13 +161,14 @@ than assume it's the only contributor to the record.
 Parser-specific metadata sources:
 
 - **Maven**: reads `name`, `description`, `developers`, and `scm` from the embedded
-  `META-INF/maven/<group>/<artifact>/pom.xml`.
+  `META-INF/maven/<group>/<artifact>/pom.xml`; tags every artifact with the `"jar"` artifact type, plus
+  `"nar"` when it finds a NiFi Archive manifest (see [Detail page sections](#detail-page-sections)).
 - **VSIX**: reads `displayName`, `description`, `author`, `contributors`, `repository`, and `icon` from the
   packaged `package.json`, with manifest fallbacks for display name, description, and source URL. Also
   discovers a packaged `readme.md` (case-insensitive; when more than one exists, the one closest to the
   extension's `extension/` root wins) and, when `package.json` declares an `icon` (e.g. `"icon.png"` or
   `"images/icon.png"`, resolved relative to `package.json`'s own directory inside the package), the referenced
-  image as this artifact's icon.
+  image as this artifact's icon. Tags every artifact with the `"vsix"` artifact type.
 
 ### README rendering
 
@@ -210,9 +214,13 @@ Defined in `artifact-site-plugins-api`:
 - `ArtifactParser` - `id()`, `displayName()`, `supports(Datum)`,
   `parse(Datum, Path, IArtifactParseContext)`, `iconResourceName()`, `openIconStream()`,
   `installGuideResourceName()` (optional), `openInstallGuideStream()`, `seoTags()` (optional)
+- `ArtifactSectionProvider` - a separate PF4J extension point declaring [detail page
+  sections](#detail-page-sections) per artifact type: `sections()` returns
+  `Map<String, List<SectionSpec>>`
 - `Datum` - a generic `namespace -> key -> value` artifact record (String/Long/UUID/`ZonedDateTime`
-  scalars, lists, and maps); list/map getters auto-vivify (create and store an empty collection the first
-  time they're read), so a parser populates one by mutating the returned collection directly
+  scalars, lists, maps, and record-lists - `List<Map<String, String>>`, for table-shaped data); list/map/
+  record-list getters auto-vivify (create and store an empty collection the first time they're read), so a
+  parser populates one by mutating the returned collection directly
 - `DatumField` / `ArtifactFields` - typed accessors over a `Datum` (e.g. `ArtifactFields.GROUP_ID`), so
   parsers and the CLI address fields by a shared, documented constant instead of a raw string key
 - `MapDatum` - the default `Datum` implementation: in-memory, and JSON-serializable through a stock Jackson
@@ -231,12 +239,15 @@ Two different ids are in play, and they're not interchangeable:
 - `ArtifactParserPlugin.pluginId()` is PF4J's identifier for the plugin/module itself (used by `list-plugins`
   and friends). It's independent of the parser it wraps.
 - `ArtifactParser.id()` is the parser's own stable identifier (e.g. `"maven"`, `"vsix"`) - this is what's
-  written into every artifact's `ArtifactFields.PLUGIN_ID` catalog field, and what drives URL routing
-  (`/artifacts/<id>/...`) and grouping. A plugin could in principle expose a parser whose `id()` differs from
-  its `pluginId()`, though today each plugin wraps exactly one parser and the two happen to match.
+  written into every artifact's `ArtifactFields.PLUGIN_ID` catalog field, and what keys the parser-level
+  icon/install-guide/SEO-tag caches below. A plugin could in principle expose a parser whose `id()` differs
+  from its `pluginId()`, though today each plugin wraps exactly one parser and the two happen to match.
 
-`ArtifactParser.displayName()` (e.g. `"Maven"`, `"VS Code Extension"`) is what's actually shown in the UI -
-parser cards, page headings, artifact card/detail "parser" labels, and search results - never `id()`.
+Neither `id()` nor `ArtifactParser.displayName()` drives the generated site's URL structure or its
+UI labels any more (see [Generated site layout](#generated-site-layout)) - both are superseded there by
+`ArtifactFields.ARTIFACT_TYPES` and `ArtifactSectionProvider.displayNames()` (see [Artifact type display
+names](#artifact-type-display-names)). `displayName()` remains on the interface as a documented part of a
+parser's identity, but nothing in `generate` reads it today.
 
 ### Parser icons
 
@@ -257,20 +268,25 @@ A parser can also override that default on a **per-artifact** basis by populatin
 file name, used to derive its extension) from its own `parse()` implementation - no plugin API changes are
 needed, since these are plain `Datum` fields any parser can set. The VSIX parser is the first to do this: it reads the
 icon referenced by the packaged `package.json`'s `icon` field. `generate` writes each artifact's own icon (when
-present) to `assets/icons/artifacts/<parser-type>/<group-id>.<artifact-id>/<version>.<ext>` and uses it in
+present) to `assets/icons/artifacts/<group-id>/<artifact-id>/<version>.<ext>` and uses it in
 place of the parser's default icon on that artifact's cards and detail page.
 
 `parse` caches each loaded parser's icon into the icons cache directory (above), named `<parser id>.<ext>`
 (e.g. `maven.svg`, `vsix.svg`), so `generate` can render icons without needing plugins loaded. `generate`
-copies cached icons into `assets/icons/` in the generated site and renders them on parser cards, artifact
-cards, and artifact detail pages.
+copies cached icons into `assets/icons/` in the generated site and renders them on artifact type cards,
+artifact cards, and artifact detail pages.
 
-### Parser display names
+### Artifact type display names
 
-`parse` caches each loaded parser's `displayName()` into the parser display name cache (above) as a JSON
-object keyed by `ArtifactParser.id()`, merged with whatever names are already cached (so a parser that isn't
-currently installed keeps its last-known display name). `generate` reads that cache and falls back to the raw
-parser id for any parser it can't find a cached name for.
+A plugin declares the UI-facing display name for each artifact type it produces (e.g. `"jar" -> "Java"`,
+`"nar" -> "Nar"`) via `ArtifactSectionProvider.displayNames()` - the same extension point used for [detail
+page sections](#detail-page-sections) below. `parse` caches every loaded provider's declared names into the
+artifact type display name cache (above) as a JSON object keyed by artifact type, merged with whatever names
+are already cached (so a type whose provider isn't currently loaded keeps its last-known display name).
+`generate` reads that cache and falls back to the raw type key for any type it can't find a cached name for,
+using it for the "Artifact Types" section on the home page, each type's own browsing page (see [Generated
+site layout](#generated-site-layout)), and the single winning-type label shown on an artifact's own card and
+detail-page badge.
 
 ### Parser install guides
 
@@ -292,23 +308,56 @@ a `document.execCommand('copy')` fallback for non-secure contexts.
 
 A parser can optionally declare format-specific SEO keywords via `seoTags()` (e.g. the Maven parser returns
 `["maven", "java", "jar", "dependency", "artifact"]`; VSIX returns `["vscode", "visual studio code",
-"extension", "vsix"]`) - defaults to none. These are combined with each individual artifact's own `tags` (see
-[Data model](#data-model)) into that artifact's `<meta name="keywords">` on its detail page, and are also used
-on their own for the parser's index page and (aggregated as parser display names) the home page - see
-[SEO](#seo) below.
+"extension", "vsix"]`) - defaults to none. An artifact detail page's `<meta name="keywords">` combines its own
+`tags` (see [Data model](#data-model)), every one of its artifact type display names (see [Artifact type
+display names](#artifact-type-display-names) - not just the one type that wins its visible badge), and its
+own parser's `seoTags()` - see [SEO](#seo) below.
 
 `parse` caches each loaded parser's `seoTags()` into the parser SEO tags cache (above) as a JSON object keyed
 by `ArtifactParser.id()`; a parser that declares no tags has any previously cached entry removed (a deliberate
 opt-out), while a parser that simply isn't loaded this run keeps its last-known tags.
+
+### Detail page sections
+
+An artifact's detail page main content (normally the rendered README, or a "no README" placeholder) can
+instead be built from one or more declared **sections**, driven by `ArtifactFields.ARTIFACT_TYPES` rather
+than `PLUGIN_ID` - so a single parser can produce artifacts of more than one type (e.g. the Maven parser's
+NiFi Archives are both `"jar"` and `"nar"`), each with its own rendering, and an artifact carrying more than
+one type renders one block of sections per type, in the order the types are listed on it.
+
+A plugin declares sections via a separate `ArtifactSectionProvider` extension (independent of
+`ArtifactParserPlugin`/`ArtifactParser` - a plugin can register both), whose `sections()` returns a
+`Map<String, List<SectionSpec>>` keyed by artifact type. Each `SectionSpec` names an optional heading, an
+`ElementType`, and the `Datum` field (namespace + key) it reads from:
+
+- `MARKDOWN` - renders a `Datum` string field as markdown (generalizes README rendering to any field).
+- `TABLE` - renders a `Datum` record-list field (`Datum.getRecordList(namespace, key)`, a
+  `List<Map<String, String>>`) as a multi-column table; the column headers are the union of each row's own
+  keys, in first-seen order, so a plugin controls headers simply by choosing consistent map keys.
+
+A section that would render nothing (a blank markdown field, or an empty record list) is omitted rather than
+shown empty. When an artifact's types produce no sections at all, its detail page falls back to the original
+README-or-placeholder rendering, so this feature is purely additive and opt-in per parser.
+
+`parse` caches every loaded provider's declared sections into the artifact type sections cache (above), keyed
+by artifact type rather than by parser or plugin id (since one provider can declare sections for several
+types at once). For each artifact type a currently loaded provider mentions, that type's cached entry is
+replaced outright, or removed when the provider now declares an empty list for it (a deliberate opt-out); a
+type no currently loaded provider mentions at all keeps whatever was cached before, the same convention used
+by install guides and SEO tags above. The Maven plugin's `MavenArtifactSectionProvider` is the reference
+implementation: it declares a `"jar"` section for the README, and a `"nifi-extension"` section per bundled
+NiFi extension showing its description plus a table each for Properties, Dynamic Properties, Relationships,
+Dynamic Relationship, Reads Attributes, and Writes Attributes - replacing what used to be a hand-built,
+pipe-delimited markdown table jammed into `README`.
 
 ## SEO
 
 Every generated page carries baseline SEO meta tags: `<meta name="description">` (from that page's own
 description), `<meta name="robots" content="index, follow">`, Open Graph (`og:type`/`og:title`/
 `og:description`/`og:image`), and Twitter Card tags, with `og:image`/`twitter:image` falling back to the
-site's own favicon when a page has no more specific icon. Artifact detail pages, artifact/parser index pages,
-tag pages, and the home page additionally carry `<meta name="keywords">` (see
-[Parser SEO tags](#parser-seo-tags) above for what feeds it).
+site's own favicon when a page has no more specific icon. Artifact detail pages, artifact index pages, tag
+pages, type pages, and the home page additionally carry `<meta name="keywords">` (see [Parser SEO
+tags](#parser-seo-tags) above for what feeds it).
 
 ## Progressive Web App
 
@@ -323,14 +372,25 @@ are cached lazily as they're visited rather than precached.
 ## Generated site layout
 
 Rendered from FreeMarker templates in `artifact-site-cli/src/main/resources/templates`
-(`layout.ftl`, `index.ftl`, `artifact.ftl`, `tag.ftl`) into `./public`:
+(`layout.ftl`, `index.ftl`, `artifact.ftl`, `tag.ftl` - reused as-is for both tag and type pages, since
+they're the same generic "cards for a cross-cutting label" shape) into `./public`:
 
-- `index.html` - lists unique parsers
-- `artifacts/<parser-type>/index.html` - lists unique `<group-id>.<artifact-id>`, using each one's latest version
-- `artifacts/<parser-type>/<group-id>.<artifact-id>/index.html` - lists all versions of an artifact, latest first
-- `artifacts/<parser-type>/<group-id>.<artifact-id>/<version>/index.html` - artifact detail page: rendered
-  README as the main content (or a "no README" note) alongside a sidebar with Resources/Details/Tags cards,
-  loosely modeled on Open VSX's extension page
+Artifacts are routed by identity, not by parser or type: `<group-id>`/`<artifact-id>` are always two
+separate path segments. "Browse by type" (an artifact's `ArtifactFields.ARTIFACT_TYPES`) is a cross-cutting
+classification layered on top - structurally identical to tag pages - so an artifact carrying more than one
+type (e.g. a NiFi Archive is both `"jar"` and `"nar"`) appears on every one of its type pages while still
+having exactly one canonical detail page.
+
+- `index.html` - home page: "Artifact Types" cards (one per distinct type, linking to its `types/` page
+  below) and the latest version of every artifact
+- `artifacts/<group-id>/<artifact-id>/index.html` - lists all versions of an artifact, latest first
+- `artifacts/<group-id>/<artifact-id>/<version>/index.html` - artifact detail page: rendered README (or
+  declared [sections](#detail-page-sections), or a "no README" note) as the main content alongside a sidebar
+  with Resources/Details/Tags cards, loosely modeled on Open VSX's extension page; its badge/card label shows
+  the single winning artifact type (see [Artifact type display names](#artifact-type-display-names)), while
+  its `<meta name="keywords">` merges *every* type it carries
+- `types/<type>/index.html` - listing of every artifact carrying that type, latest version of each (same
+  shape as a tag page)
 - `tags/<tag>/index.html` - tag-filtered listing
 - `build-info.html` - provenance for the generated site: CI/CD provider, source repository/commit link, and
   pipeline/run link, read from GitHub Actions or GitLab CI environment variables at `generate` time (blank on a
@@ -339,7 +399,7 @@ Rendered from FreeMarker templates in `artifact-site-cli/src/main/resources/temp
   every page, and the fallback icon for parsers/artifacts with no icon of their own - see
   [Parser icons](#parser-icons))
 - `assets/icons/<pluginId>.<ext>` - each parser plugin's default icon, copied from the icons cache
-- `assets/icons/artifacts/<parser-type>/<group-id>.<artifact-id>/<version>.<ext>` - per-artifact icon
+- `assets/icons/artifacts/<group-id>/<artifact-id>/<version>.<ext>` - per-artifact icon
   overrides (see [Parser icons](#parser-icons)), written only for artifacts whose parser supplied one
 - `search-index.json` - powers the header search box's live results dropdown (vanilla JS, no runtime CSS
   framework)
@@ -366,7 +426,6 @@ client-side search are implemented and working. Remaining work:
 - Add java modules to src code?
 - More sensible commands like "artifact add" "plugin add" "artifact clear" "plugin clear"s
 - Add url to background href / a element.
-- Override FTL files plugin behavior?
 - ArtifactParseContext is strange in what is stored there.
 - Parsers should avoid reading in all the bytes to memory.
 - SHA-256 should include a download link

@@ -15,11 +15,11 @@ import java.util.UUID;
  * custom (de)serializers or extra modules (e.g. jackson-datatype-jsr310).
  *
  * <p>Scalar accessors ({@code getString}/{@code getLong}/{@code getReference}/{@code
- * getDateTime}) return {@code null} when unset. List and map accessors instead create and store
- * an empty {@link List}/{@link Map} the first time they're read for a given namespace/key, and
- * return that same live instance thereafter, so callers can populate a field by mutating the
- * returned collection directly (e.g. {@code datum.getStringList(ns, key).add("value")}) without a
- * separate {@code set} call.
+ * getDateTime}) return {@code null} when unset. List, map, and record-list accessors instead
+ * create and store an empty {@link List}/{@link Map} the first time they're read for a given
+ * namespace/key, and return that same live instance thereafter, so callers can populate a field by
+ * mutating the returned collection directly (e.g. {@code datum.getStringList(ns, key).add("value")})
+ * without a separate {@code set} call.
  */
 public class MapDatum implements Datum {
 
@@ -28,6 +28,7 @@ public class MapDatum implements Datum {
     private Map<String, Map<String, String>> stringFields = new LinkedHashMap<>();
     private Map<String, Map<String, List<String>>> stringListFields = new LinkedHashMap<>();
     private Map<String, Map<String, Map<String, String>>> stringMapFields = new LinkedHashMap<>();
+    private Map<String, Map<String, List<Map<String, String>>>> recordListFields = new LinkedHashMap<>();
 
     private Map<String, Map<String, Long>> longFields = new LinkedHashMap<>();
     private Map<String, Map<String, List<Long>>> longListFields = new LinkedHashMap<>();
@@ -84,6 +85,14 @@ public class MapDatum implements Datum {
 
     public void setStringMapFields(Map<String, Map<String, Map<String, String>>> stringMapFields) {
         this.stringMapFields = stringMapFields;
+    }
+
+    public Map<String, Map<String, List<Map<String, String>>>> getRecordListFields() {
+        return recordListFields;
+    }
+
+    public void setRecordListFields(Map<String, Map<String, List<Map<String, String>>>> recordListFields) {
+        this.recordListFields = recordListFields;
     }
 
     public Map<String, Map<String, Long>> getLongFields() {
@@ -198,6 +207,11 @@ public class MapDatum implements Datum {
     @Override
     public Map<String, String> getStringMap(String namespace, String key) {
         return getOrCreateMap(stringMapFields, namespace, key);
+    }
+
+    @Override
+    public List<Map<String, String>> getRecordList(String namespace, String key) {
+        return getOrCreateList(recordListFields, namespace, key);
     }
 
     @Override

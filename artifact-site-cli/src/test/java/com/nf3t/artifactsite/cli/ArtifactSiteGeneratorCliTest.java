@@ -26,8 +26,11 @@ import com.nf3t.artifactsite.api.ArtifactFields;
 import com.nf3t.artifactsite.api.ArtifactParser;
 import com.nf3t.artifactsite.api.ArtifactParserPlugin;
 import com.nf3t.artifactsite.api.Datum;
+import com.nf3t.artifactsite.api.DatumField;
+import com.nf3t.artifactsite.api.ElementType;
 import com.nf3t.artifactsite.api.IArtifactParseContext;
 import com.nf3t.artifactsite.api.MapDatum;
+import com.nf3t.artifactsite.api.SectionSpec;
 
 import picocli.CommandLine;
 import tools.jackson.databind.ObjectMapper;
@@ -315,16 +318,16 @@ class ArtifactSiteGeneratorCliTest {
         assertThat(Files.exists(outputDir.resolve("assets/styles.css"))).isTrue();
         assertThat(Files.exists(outputDir.resolve("assets/app.js"))).isTrue();
         assertThat(Files.exists(outputDir.resolve("assets/logo.svg"))).isTrue();
-        assertThat(Files.exists(outputDir.resolve("artifacts/vsix/index.html"))).isTrue();
-        assertThat(Files.exists(outputDir.resolve("artifacts/vsix/acme.demo/index.html"))).isTrue();
-        assertThat(Files.exists(outputDir.resolve("artifacts/vsix/acme.demo/2.0.0/index.html"))).isTrue();
+        assertThat(Files.exists(outputDir.resolve("types/vsix/index.html"))).isTrue();
+        assertThat(Files.exists(outputDir.resolve("artifacts/acme/demo/index.html"))).isTrue();
+        assertThat(Files.exists(outputDir.resolve("artifacts/acme/demo/2.0.0/index.html"))).isTrue();
         assertThat(Files.exists(outputDir.resolve("tags/analytics/index.html"))).isTrue();
         assertThat(Files.exists(outputDir.resolve("search-index.json"))).isTrue();
 
         Path copiedDownload = outputDir.resolve("downloads/demo/2.0.0/demo-2.0.0.vsix");
         assertThat(Files.readString(copiedDownload)).isEqualTo("artifact-bytes");
 
-        String detailPage = Files.readString(outputDir.resolve("artifacts/vsix/acme.demo/2.0.0/index.html"));
+        String detailPage = Files.readString(outputDir.resolve("artifacts/acme/demo/2.0.0/index.html"));
         assertThat(detailPage).contains("<title>Acme Demo 2.0.0</title>");
         assertThat(detailPage).contains("second release");
         assertThat(detailPage).contains("Download");
@@ -333,7 +336,7 @@ class ArtifactSiteGeneratorCliTest {
         assertThat(detailPage).contains("<h1>Demo</h1>");
         assertThat(detailPage).contains("<strong>readme</strong>");
 
-        String noReadmeDetailPage = Files.readString(outputDir.resolve("artifacts/vsix/acme.demo/1.0.0/index.html"));
+        String noReadmeDetailPage = Files.readString(outputDir.resolve("artifacts/acme/demo/1.0.0/index.html"));
         assertThat(noReadmeDetailPage).contains("No README was found for this artifact.");
 
         String rootIndex = Files.readString(outputDir.resolve("index.html"));
@@ -432,19 +435,19 @@ class ArtifactSiteGeneratorCliTest {
         assertThat(rootIndex).contains("<link rel=\"icon\" type=\"image/png\" href=\"assets/favicon.png\">");
         assertThat(rootIndex).contains("<img src=\"assets/favicon.png\" alt=\"Artifact Site\"");
 
-        String parserIndex = Files.readString(outputDir.resolve("artifacts").resolve(parserId).resolve("index.html"));
-        assertThat(parserIndex).doesNotContain("Acme Registry");
-        assertThat(parserIndex).contains("<link rel=\"icon\" type=\"image/png\" href=\"../../assets/favicon.png\">");
-        assertThat(parserIndex).contains("<img src=\"../../assets/favicon.png\" alt=\"Artifact Site\"");
+        String childPage = Files.readString(outputDir.resolve("artifacts").resolve("acme").resolve("demo").resolve("index.html"));
+        assertThat(childPage).doesNotContain("Acme Registry");
+        assertThat(childPage).contains("<link rel=\"icon\" type=\"image/png\" href=\"../../../assets/favicon.png\">");
+        assertThat(childPage).contains("<img src=\"../../../assets/favicon.png\" alt=\"Artifact Site\"");
     }
 
     /**
      * The generated site is a basic PWA: a {@code manifest.webmanifest} naming the effective home
      * page title and pointing at the effective favicon, and a registered {@code sw.js} at the site
      * root. Every page also carries baseline SEO meta tags, and an artifact detail page's {@code
-     * <meta name="keywords">} must include that artifact's own tags (on top of any parser-level
-     * SEO tags - see {@code ArtifactParser#seoTags()}, covered separately by
-     * {@code ParserSeoTagsCacheTest}).
+     * <meta name="keywords">} must include that artifact's own tags and every one of its artifact
+     * type labels (on top of any parser-level SEO tags - see {@code ArtifactParser#seoTags()},
+     * covered separately by {@code ParserSeoTagsCacheTest}).
      */
     @Test
     void generateWritesPwaManifestServiceWorkerAndArtifactKeywords() throws IOException {
@@ -459,6 +462,7 @@ class ArtifactSiteGeneratorCliTest {
         ArtifactFields.VERSION.setString(artifact, "1.0.0");
         ArtifactFields.DESCRIPTION.setString(artifact, "A demo artifact");
         ArtifactFields.TAGS.getStringList(artifact).addAll(List.of("etl", "catalog"));
+        ArtifactFields.ARTIFACT_TYPES.getStringList(artifact).add("widget");
         ArtifactFields.SOURCE_TYPE.setString(artifact, "remote");
         ArtifactFields.SOURCE_VALUE.setString(artifact, "https://example.com/acme-demo-1.0.0.jar");
         ArtifactFields.DOWNLOAD_URL.setString(artifact, "https://example.com/acme-demo-1.0.0.jar");
@@ -484,11 +488,156 @@ class ArtifactSiteGeneratorCliTest {
 
         String detailPage = Files.readString(
                 outputDir.resolve("artifacts")
-                        .resolve(ArtifactFields.PLUGIN_ID.getString(artifact))
-                        .resolve("acme.demo")
+                        .resolve("acme")
+                        .resolve("demo")
                         .resolve("1.0.0")
                         .resolve("index.html"));
-        assertThat(detailPage).contains("<meta name=\"keywords\" content=\"etl, catalog\">");
+        assertThat(detailPage).contains("<meta name=\"keywords\" content=\"etl, catalog, widget\">");
+    }
+
+    /**
+     * An artifact tagged with an {@link ArtifactFields#ARTIFACT_TYPES} type that has declared
+     * sections (see {@code ArtifactTypeSectionsCache}, populated here directly to stand in for
+     * what {@code parse} would have cached from a real {@code ArtifactSectionProvider}) renders
+     * those sections - both a MARKDOWN and a TABLE one - in place of the plain README block. An
+     * artifact with no matching type/sections must keep rendering exactly as before.
+     */
+    @Test
+    void generateRendersDeclaredArtifactTypeSectionsAndFallsBackWhenNoneApply() throws IOException {
+        String originalUserHome = System.getProperty("user.home");
+        System.setProperty("user.home", tempDir.toString());
+        try {
+            Path artifactJson = tempDir.resolve("artifacts.json");
+            Path outputDir = tempDir.resolve("public");
+            String parserId = "sectioned-parser-" + System.nanoTime();
+            String artifactType = "widget";
+            DatumField tableField = new DatumField() {
+                @Override
+                public String getNamespace() {
+                    return "com.example.test";
+                }
+
+                @Override
+                public String getKey() {
+                    return "widget_table";
+                }
+
+                @Override
+                public String getFieldDescription() {
+                    return "test table field";
+                }
+            };
+
+            Datum withSections = new MapDatum();
+            ArtifactFields.PLUGIN_ID.setString(withSections, parserId);
+            ArtifactFields.GROUP_ID.setString(withSections, "acme");
+            ArtifactFields.ARTIFACT_ID.setString(withSections, "widget-a");
+            ArtifactFields.NAME.setString(withSections, "Widget A");
+            ArtifactFields.VERSION.setString(withSections, "1.0.0");
+            ArtifactFields.SOURCE_TYPE.setString(withSections, "remote");
+            ArtifactFields.SOURCE_VALUE.setString(withSections, "https://example.com/widget-a-1.0.0.jar");
+            ArtifactFields.DOWNLOAD_URL.setString(withSections, "https://example.com/widget-a-1.0.0.jar");
+            ArtifactFields.ARTIFACT_TYPES.getStringList(withSections).add(artifactType);
+            ArtifactFields.DESCRIPTION.setString(withSections, "**bold** summary");
+            tableField.getRecordList(withSections).add(Map.of("Name", "alpha", "Default", "1"));
+
+            Datum withoutSections = new MapDatum();
+            ArtifactFields.PLUGIN_ID.setString(withoutSections, parserId);
+            ArtifactFields.GROUP_ID.setString(withoutSections, "acme");
+            ArtifactFields.ARTIFACT_ID.setString(withoutSections, "widget-b");
+            ArtifactFields.NAME.setString(withoutSections, "Widget B");
+            ArtifactFields.VERSION.setString(withoutSections, "1.0.0");
+            ArtifactFields.SOURCE_TYPE.setString(withoutSections, "remote");
+            ArtifactFields.SOURCE_VALUE.setString(withoutSections, "https://example.com/widget-b-1.0.0.jar");
+            ArtifactFields.DOWNLOAD_URL.setString(withoutSections, "https://example.com/widget-b-1.0.0.jar");
+
+            OBJECT_MAPPER.writeValue(artifactJson.toFile(), List.of(withSections, withoutSections));
+
+            Map<String, List<SectionSpec>> declaredSections = Map.of(
+                    artifactType,
+                    List.of(
+                            new SectionSpec(null, ElementType.MARKDOWN, ArtifactFields.DESCRIPTION),
+                            new SectionSpec("Widget Table", ElementType.TABLE, tableField)));
+            Path sectionsCachePath = XdgPaths.artifactTypeSectionsPath();
+            Files.createDirectories(sectionsCachePath.getParent());
+            OBJECT_MAPPER.writeValue(sectionsCachePath.toFile(), declaredSections);
+
+            int exitCode = new CommandLine(new ArtifactSiteGeneratorCli())
+                    .execute("--artifact-json", artifactJson.toString(), "generate", "--output", outputDir.toString());
+            assertThat(exitCode).isZero();
+
+            String withSectionsPage = Files.readString(
+                    outputDir.resolve("artifacts").resolve("acme").resolve("widget-a").resolve("1.0.0").resolve("index.html"));
+            assertThat(withSectionsPage).contains("<strong>bold</strong> summary");
+            assertThat(withSectionsPage).contains("Widget Table");
+            assertThat(withSectionsPage).contains("class=\"data-table\"");
+            assertThat(withSectionsPage).contains("alpha");
+            assertThat(withSectionsPage).doesNotContain("No README was found");
+
+            String withoutSectionsPage = Files.readString(
+                    outputDir.resolve("artifacts").resolve("acme").resolve("widget-b").resolve("1.0.0").resolve("index.html"));
+            assertThat(withoutSectionsPage).contains("No README was found for this artifact.");
+        } finally {
+            System.setProperty("user.home", originalUserHome);
+        }
+    }
+
+    /**
+     * An artifact carrying more than one {@link ArtifactFields#ARTIFACT_TYPES} (e.g. a NiFi
+     * Archive is both {@code "jar"} and {@code "nar"}) must not have one type "win" for browsing
+     * or keywords - it appears on every one of its type pages, and every type's label is merged
+     * into its own {@code pageKeywords} - but its own card/detail-page badge shows exactly one
+     * type (the last/most specific one), not all of them, to keep that compact label readable.
+     */
+    @Test
+    void generateTreatsMultipleArtifactTypesAsInclusiveBrowsingButOneWinningBadge() throws IOException {
+        String originalUserHome = System.getProperty("user.home");
+        System.setProperty("user.home", tempDir.toString());
+        try {
+            Path artifactJson = tempDir.resolve("artifacts.json");
+            Path outputDir = tempDir.resolve("public");
+
+            Datum artifact = new MapDatum();
+            ArtifactFields.PLUGIN_ID.setString(artifact, "maven");
+            ArtifactFields.GROUP_ID.setString(artifact, "acme");
+            ArtifactFields.ARTIFACT_ID.setString(artifact, "multitype");
+            ArtifactFields.NAME.setString(artifact, "Acme Multitype");
+            ArtifactFields.VERSION.setString(artifact, "1.0.0");
+            ArtifactFields.SOURCE_TYPE.setString(artifact, "remote");
+            ArtifactFields.SOURCE_VALUE.setString(artifact, "https://example.com/acme-multitype-1.0.0.nar");
+            ArtifactFields.DOWNLOAD_URL.setString(artifact, "https://example.com/acme-multitype-1.0.0.nar");
+            ArtifactFields.ARTIFACT_TYPES.getStringList(artifact).addAll(List.of("jar", "nar"));
+
+            OBJECT_MAPPER.writeValue(artifactJson.toFile(), List.of(artifact));
+
+            Path displayNamesCachePath = XdgPaths.artifactTypeDisplayNamesPath();
+            Files.createDirectories(displayNamesCachePath.getParent());
+            OBJECT_MAPPER.writeValue(displayNamesCachePath.toFile(), Map.of("jar", "Java", "nar", "Nar"));
+
+            int exitCode = new CommandLine(new ArtifactSiteGeneratorCli())
+                    .execute("--artifact-json", artifactJson.toString(), "generate", "--output", outputDir.toString());
+            assertThat(exitCode).isZero();
+
+            String detailPage = Files.readString(
+                    outputDir.resolve("artifacts").resolve("acme").resolve("multitype").resolve("1.0.0").resolve("index.html"));
+            assertThat(detailPage).contains("<span class=\"badge\">Nar</span>");
+            assertThat(detailPage).doesNotContain("<span class=\"badge\">Java</span>");
+            assertThat(detailPage).contains("<meta name=\"keywords\" content=\"Java, Nar\">");
+
+            assertThat(Files.exists(outputDir.resolve("types/jar/index.html"))).isTrue();
+            assertThat(Files.exists(outputDir.resolve("types/nar/index.html"))).isTrue();
+            String jarTypePage = Files.readString(outputDir.resolve("types/jar/index.html"));
+            String narTypePage = Files.readString(outputDir.resolve("types/nar/index.html"));
+            assertThat(jarTypePage).contains("Acme Multitype");
+            assertThat(narTypePage).contains("Acme Multitype");
+
+            String rootIndex = Files.readString(outputDir.resolve("index.html"));
+            assertThat(rootIndex).contains("<h2>Artifact Types</h2>");
+            assertThat(rootIndex).contains("<strong>Java</strong>");
+            assertThat(rootIndex).contains("<strong>Nar</strong>");
+        } finally {
+            System.setProperty("user.home", originalUserHome);
+        }
     }
 
     /**
@@ -524,7 +673,7 @@ class ArtifactSiteGeneratorCliTest {
         assertThat(exitCode).isZero();
 
         String tagPage = Files.readString(outputDir.resolve("tags").resolve(tag).resolve("index.html"));
-        String expectedIconPath = "../../assets/icons/artifacts/" + ArtifactFields.PLUGIN_ID.getString(artifact) + "/acme.demo/1.0.0.png";
+        String expectedIconPath = "../../assets/icons/artifacts/acme/demo/1.0.0.png";
         assertThat(tagPage).contains("<meta property=\"og:image\" content=\"" + expectedIconPath + "\">");
         assertThat(tagPage).contains("<meta name=\"twitter:image\" content=\"" + expectedIconPath + "\">");
         assertThat(tagPage).contains("class=\"page-icon\" src=\"" + expectedIconPath + "\"");

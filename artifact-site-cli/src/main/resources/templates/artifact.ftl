@@ -17,7 +17,7 @@
         <div class="extension-badges">
           <span class="badge">${groupId?html}.${artifactId?html}</span>
           <span class="badge">v${version?html}</span>
-          <span class="badge">${parserType?html}</span>
+          <span class="badge">${artifactType?html}</span>
           <#if license?has_content><span class="badge">${license?html}</span></#if>
         </div>
         <#if tags?size gt 0>
@@ -41,7 +41,27 @@
 
   <div class="extension-layout">
     <article class="extension-main">
-      <#if readmeHtml?has_content>
+      <#if sections?? && sections?size gt 0>
+        <#list sections as section>
+          <section class="artifact-section">
+            <#if section.title?? && section.title?has_content><h2>${section.title?html}</h2></#if>
+            <#if section.type == "markdown">
+              <div class="readme">${section.html}</div>
+            <#elseif section.type == "table">
+              <table class="data-table">
+                <thead>
+                  <tr><#list section.columns as col><th>${col?html}</th></#list></tr>
+                </thead>
+                <tbody>
+                  <#list section.rows as row>
+                    <tr><#list section.columns as col><td>${(row[col])!""?html}</td></#list></tr>
+                  </#list>
+                </tbody>
+              </table>
+            </#if>
+          </section>
+        </#list>
+      <#elseif readmeHtml?has_content>
         <div class="readme">${readmeHtml}</div>
       <#else>
         <p class="lead">No README was found for this artifact.</p>

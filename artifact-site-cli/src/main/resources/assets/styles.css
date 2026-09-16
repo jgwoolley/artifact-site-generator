@@ -589,6 +589,35 @@ th, td {
   overflow-wrap: anywhere;
 }
 
+/* Declared per-artifact-type detail page sections (see GenerateCommand#buildSections, artifact.ftl) */
+.artifact-section + .artifact-section {
+  margin-top: 1.5rem;
+}
+
+.artifact-section h2 {
+  font-size: 1.1rem;
+  margin: 0 0 0.6em;
+}
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.data-table th, .data-table td {
+  border: 1px solid var(--line);
+  padding: 0.45rem 0.6rem;
+  text-align: left;
+}
+
+.data-table th {
+  background: var(--tag-bg);
+}
+
 /* "How to Install" popup (see artifact.ftl) */
 .modal {
   border: none;

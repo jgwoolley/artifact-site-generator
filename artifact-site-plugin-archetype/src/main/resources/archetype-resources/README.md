@@ -12,7 +12,14 @@ Artifact Site Generator parser plugin for ${parserDisplayName}, generated from t
 3. Edit `src/main/resources/.../install.html` (supports `{{groupId}}`, `{{artifactId}}`, and
    `{{version}}` placeholders), or delete it along with the `installGuideResourceName()` /
    `openInstallGuideStream()` overrides in the parser class if this format has no install guide.
-4. Update `artifact-site-plugins-api.version` and `pf4j.version` in `pom.xml` if targeting a
+4. Optionally add a separate `ArtifactSectionProvider` extension declaring, per artifact type (set via
+   `ArtifactFields.ARTIFACT_TYPES` in `parse(...)`): detail page sections - a `MARKDOWN` section renders a
+   `Datum` string field as markdown, a `TABLE` section renders a `Datum` record-list field
+   (`List<Map<String, String>>`) as a table - and `displayNames()`, the UI label shown for that type on the
+   home page, its own browsing page, and artifact cards/badges (falls back to the raw type key if omitted).
+   Not scaffolded by default; see `MavenArtifactSectionProvider` in `artifact-site-plugin-maven` for a worked
+   example.
+5. Update `artifact-site-plugins-api.version` and `pf4j.version` in `pom.xml` if targeting a
    different Artifact Site Generator release than the one this archetype defaulted to.
 
 ## Adding dependencies

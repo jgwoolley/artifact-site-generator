@@ -39,6 +39,8 @@ public class VsixArtifactParser implements ArtifactParser {
     private static final String ICON_RESOURCE_NAME = "icon.svg";
     private static final String INSTALL_GUIDE_RESOURCE_NAME = "install.html";
     private static final String PARSER_ID = "vsix";
+    /** Artifact type tag (see {@link ArtifactFields#ARTIFACT_TYPES}) for every VSIX this parser handles. */
+    static final String ARTIFACT_TYPE_VSIX = "vsix";
     private static final List<String> SEO_TAGS = List.of("vscode", "visual studio code", "extension", "vsix");
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
@@ -117,6 +119,7 @@ public class VsixArtifactParser implements ArtifactParser {
             ArtifactFields.ID.setString(metadata, groupId + ":" + artifactId + ":" + version);
             ArtifactFields.FILE_SIZE.setLong(metadata, (long) content.length);
             ArtifactFields.PLUGIN_ID.setString(metadata, id());
+            ArtifactFields.ARTIFACT_TYPES.getStringList(metadata).add(ARTIFACT_TYPE_VSIX);
             ArtifactFields.SCM_URL.setString(metadata, sourceUrl);
             ArtifactFields.README.setString(metadata, readReadme(content));
 
