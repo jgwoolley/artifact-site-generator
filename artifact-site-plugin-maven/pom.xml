@@ -21,7 +21,7 @@
     <tag>HEAD</tag>
   </scm>
 	<properties>
-		<nifi.version>2.11.0</nifi.version>
+		<nifi.version>1.28.1</nifi.version>
 	</properties>
 
   <dependencies>
@@ -58,6 +58,11 @@
 	    <artifactId>nifi-extension-manifest-parser</artifactId>
 	    <version>${nifi.version}</version>
 	</dependency>
+    <dependency>
+      <groupId>com.sun.xml.bind</groupId>
+      <artifactId>jaxb-impl</artifactId>
+      <version>2.3.3</version>
+    </dependency>
   </dependencies>
 
   <build>

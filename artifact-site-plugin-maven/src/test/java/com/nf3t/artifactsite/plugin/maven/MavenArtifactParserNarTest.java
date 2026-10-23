@@ -22,8 +22,8 @@ import com.nf3t.artifactsite.api.Datum;
 import com.nf3t.artifactsite.api.IArtifactParseContext;
 import com.nf3t.artifactsite.api.MapDatum;
 
-import jakarta.xml.bind.JAXBContext;
-import jakarta.xml.bind.Marshaller;
+import javax.xml.bind.JAXBContext;
+import javax.xml.bind.Marshaller;
 
 /**
  * Covers the NiFi Archive (.nar) path of {@link MavenArtifactParser}: a NAR is also a JAR (see
