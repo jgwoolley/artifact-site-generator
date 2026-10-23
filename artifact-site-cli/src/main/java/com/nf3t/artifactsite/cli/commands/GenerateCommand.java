@@ -57,6 +57,9 @@ import tools.jackson.databind.ObjectMapper;
  */
 @Command(name = "generate", description = "Generates a static artifact registry site")
 public class GenerateCommand implements Runnable {
+    /** Maximum number of artifacts shown in the home page's single "Latest Artifacts" row; the rest stay reachable via type pages and search. */
+    private static final int HOME_LATEST_ARTIFACT_LIMIT = 5;
+
     private static final Logger LOGGER = LoggerFactory.getLogger(GenerateCommand.class);
     private static final Pattern SANITIZE_SEGMENT = Pattern.compile("[^a-zA-Z0-9._-]");
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
@@ -488,7 +491,9 @@ public class GenerateCommand implements Runnable {
         modelData.put("rootPath", "");
         modelData.put("pageKeywords", String.join(", ", combineKeywords(typeLabels, List.of())));
         modelData.put("typeSummaries", typeSummaries);
-        modelData.put("artifactCards", model.allLatestArtifactCards());
+        List<Map<String, Object>> latestCards = model.allLatestArtifactCards();
+        modelData.put("artifactCards", latestCards.subList(0, Math.min(latestCards.size(), HOME_LATEST_ARTIFACT_LIMIT)));
+        modelData.put("totalArtifactCount", latestCards.size());
         return modelData;
     }
 

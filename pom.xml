@@ -21,6 +21,8 @@
     <module>artifact-site-plugin-archetype</module>
     <module>artifact-site-plugin-vsix</module>
     <module>artifact-site-plugin-maven</module>
+    <module>artifact-site-plugin-chrome</module>
+    <module>artifact-site-plugin-vintagestory</module>
   </modules>
   <properties>
     <maven.compiler.source>17</maven.compiler.source>

@@ -1,0 +1,110 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>com.nf3t</groupId>
+    <artifactId>artifact-site-parent</artifactId>
+    <version>0.1.0-SNAPSHOT</version>
+  </parent>
+
+  <artifactId>artifact-site-plugin-chrome</artifactId>
+  <name>Artifact Site Chrome Extension Plugin</name>
+  <description>Generates documentation for Chrome browser extensions (.crx and .zip packages).</description>
+  <developers>
+    <developer><name>jgwoolley</name></developer>
+  </developers>
+  <scm>
+    <url>https://github.com/jgwoolley/artifact-site-generator</url>
+    <connection>scm:git:git://github.com/jgwoolley/artifact-site-generator.git</connection>
+    <developerConnection>scm:git:ssh://github.com/jgwoolley/artifact-site-generator.git</developerConnection>
+    <tag>HEAD</tag>
+  </scm>
+
+  <dependencies>
+    <dependency>
+      <groupId>com.nf3t</groupId>
+      <artifactId>artifact-site-plugins-api</artifactId>
+      <version>${project.version}</version>
+      <scope>provided</scope>
+    </dependency>
+
+    <!-- PF4J Core (contains @Extension and ExtensionAnnotationProcessor) -->
+    <dependency>
+      <groupId>org.pf4j</groupId>
+      <artifactId>pf4j</artifactId>
+      <version>${pf4j.version}</version>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>tools.jackson.core</groupId>
+      <artifactId>jackson-databind</artifactId>
+      <scope>provided</scope>
+    </dependency>
+
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.assertj</groupId>
+      <artifactId>assertj-core</artifactId>
+      <version>3.26.3</version>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-compiler-plugin</artifactId>
+        <configuration>
+          <annotationProcessorPaths>
+            <path>
+              <groupId>org.pf4j</groupId>
+              <artifactId>pf4j</artifactId>
+              <version>${pf4j.version}</version>
+            </path>
+          </annotationProcessorPaths>
+        </configuration>
+      </plugin>
+
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-surefire-plugin</artifactId>
+      </plugin>
+
+      <!-- pf4j's JarPluginLoader loads this module as a single jar, and its classloader only
+           forwards com.nf3t.artifactsite.api.* and org.pf4j.* classes from the host CLI - any
+           dependency this plugin adds beyond the provided ones above must be bundled into this
+           jar or it will throw ClassNotFoundException at runtime. -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-shade-plugin</artifactId>
+        <version>3.6.0</version>
+        <executions>
+          <execution>
+            <phase>package</phase>
+            <goals>
+              <goal>shade</goal>
+            </goals>
+            <configuration>
+              <createDependencyReducedPom>false</createDependencyReducedPom>
+              <transformers>
+                <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
+                  <manifestEntries>
+                    <Plugin-Id>chrome</Plugin-Id>
+                    <Plugin-Version>${project.version}</Plugin-Version>
+                    <Plugin-Provider>jgwoolley</Plugin-Provider>
+                  </manifestEntries>
+                </transformer>
+              </transformers>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
+</project>

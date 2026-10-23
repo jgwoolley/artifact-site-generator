@@ -72,6 +72,11 @@
     </#if>
     <#nested>
   </main>
+  <footer class="site-footer">
+    <a href="https://www.nf3t.com">NF3t tools</a>
+    <a href="https://www.nf3t.com/#/aistance">Stance on AI</a>
+    <a href="https://github.com/jgwoolley/artifact-site-generator">Source</a>
+  </footer>
   <script src="${rootPath}assets/app.js"></script>
 </body>
 </html>

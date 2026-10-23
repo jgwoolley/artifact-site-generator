@@ -27,6 +27,8 @@ A Java CLI that parses release artifacts (VSIX extensions, Maven/JAR artifacts, 
 - `artifact-site-cli` - main executable CLI: plugin loading, parse pipeline, static site generation
 - `artifact-site-plugin-vsix` - VSIX parser plugin
 - `artifact-site-plugin-maven` - Maven/JAR parser plugin
+- `artifact-site-plugin-chrome` - Chrome browser extension parser plugin (`.crx` and `.zip`)
+- `artifact-site-plugin-vintagestory` - Vintage Story mod parser plugin (`.zip`)
 - `artifact-site-plugin-archetype` - Maven archetype that scaffolds a new parser plugin module (see
   [New parser plugins](#new-parser-plugins))
 
@@ -169,6 +171,22 @@ Parser-specific metadata sources:
   extension's `extension/` root wins) and, when `package.json` declares an `icon` (e.g. `"icon.png"` or
   `"images/icon.png"`, resolved relative to `package.json`'s own directory inside the package), the referenced
   image as this artifact's icon. Tags every artifact with the `"vsix"` artifact type.
+- **Chrome**: reads a `.crx` (CRX2 and CRX3; the header is skipped and the extension id taken from it) or an
+  unpacked-extension `.zip`, then `manifest.json` (comments and trailing commas allowed). Resolves
+  `__MSG_key__` names/descriptions from `_locales/` (default locale, then `en`, then any), and picks the extension
+  id as the artifact id (from the CRX header, else the manifest's `key`, else a slug of the name) under the fixed
+  `chrome` group. Also reads `author`, `homepage_url`, the largest declared icon, and a packaged `README.md`;
+  lists `permissions`, `host_permissions`, optional permissions, and content-script match patterns in a
+  Permissions table, plus a Manifest summary. Tags every artifact with the `"chrome-extension"` artifact type
+  and a `manifest-vN` tag.
+- **Vintage Story**: reads `modinfo.json` from a mod `.zip` (leniently, like the game: comments, trailing commas,
+  case-insensitive property names; `modid` falls back to the normalized `name`) under the fixed `vintagestory`
+  group. Also reads `authors`/`contributors`, `website`, `modicon.*`, a packaged `README.md`, and lists
+  `dependencies` (object or legacy array form) in a Dependencies table, plus a Mod Info summary (type, side,
+  required-on flags, assemblies, asset domains). Tags every artifact with the `"vintagestory-mod"` artifact type.
+
+Both generic-`.zip` parsers (Chrome and Vintage Story) silently skip a zip that lacks their manifest, so they can
+coexist with each other on the same input.
 
 ### README rendering
 
@@ -382,7 +400,7 @@ type (e.g. a NiFi Archive is both `"jar"` and `"nar"`) appears on every one of i
 having exactly one canonical detail page.
 
 - `index.html` - home page: "Artifact Types" cards (one per distinct type, linking to its `types/` page
-  below) and the latest version of every artifact
+  below) and a single row of up to 5 artifacts (latest version of each, alphabetical; the rest are reachable via type pages and search)
 - `artifacts/<group-id>/<artifact-id>/index.html` - lists all versions of an artifact, latest first
 - `artifacts/<group-id>/<artifact-id>/<version>/index.html` - artifact detail page: rendered README (or
   declared [sections](#detail-page-sections), or a "no README" note) as the main content alongside a sidebar
@@ -417,8 +435,7 @@ having exactly one canonical detail page.
 Bootstrap, plugin API, catalog persistence, remote parsing, static generation, and the OpenVSIX-style UI with
 client-side search are implemented and working. Remaining work:
 
-- [ ] More parser plugins: VintageStory Mod, Chrome Browser Extension, NiFi NAR (module not yet wired into
-      the root `pom.xml`)
+- [ ] More parser plugins: NiFi NAR (module not yet wired into the root `pom.xml`)
 - [ ] Hardening: broader input validation, more tests, docs, packaging, release steps
 
 ## TODO

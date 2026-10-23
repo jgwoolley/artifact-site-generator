@@ -215,6 +215,17 @@ body {
   gap: 1.1rem;
 }
 
+/* Home page "Latest Artifacts": one row of up to 5 cards on wide screens, wrapping normally when narrow. */
+.grid.latest-row {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+@media (max-width: 1100px) {
+  .grid.latest-row {
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  }
+}
+
 .card {
   background: var(--card);
   border: 1px solid var(--line);
@@ -737,4 +748,21 @@ th, td {
     width: 44px;
     height: 44px;
   }
+}
+
+.site-footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  justify-content: center;
+  padding: 1.5rem 1rem;
+  color: var(--muted);
+}
+
+.site-footer a {
+  color: inherit;
+}
+
+.site-footer a:hover {
+  color: var(--accent);
 }

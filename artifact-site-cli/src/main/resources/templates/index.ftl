@@ -20,7 +20,8 @@
   <#if artifactCards?? && artifactCards?size gt 0>
     <section>
       <h2>Latest Artifacts</h2>
-      <div class="grid artifact-grid">
+      <#if (totalArtifactCount!0) gt artifactCards?size><p class="meta">Showing ${artifactCards?size} of ${totalArtifactCount} artifacts. Browse by type above or use search for the rest.</p></#if>
+      <div class="grid artifact-grid latest-row">
         <#list artifactCards as artifact>
           <a class="card artifact-card" href="${rootPath}${artifact.url?remove_beginning('/')}">
             <#if artifact.icon?has_content><img class="card-icon" src="${rootPath}${artifact.icon?remove_beginning('/')}" alt="" width="56" height="56"></#if>
